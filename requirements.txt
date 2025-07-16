@@ -1,0 +1,5 @@
+semantic-kernel
+pandas
+numpy
+matplotlib
+dotenv
