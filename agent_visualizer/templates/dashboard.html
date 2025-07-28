@@ -19,6 +19,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
     
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 </head>
@@ -178,13 +181,13 @@
                 <div class="card mb-3">
                     <div class="card-header">
                         <h5>
-                            <button class="btn btn-link p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#tool-distribution" aria-expanded="true">
+                            <button class="btn btn-link collapsed p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#tool-distribution" aria-expanded="false">
                                 <i class="fas fa-tools"></i> Tool Usage Distribution
-                                <i class="fas fa-chevron-up float-end"></i>
+                                <i class="fas fa-chevron-down float-end"></i>
                             </button>
                         </h5>
                     </div>
-                    <div id="tool-distribution" class="collapse show">
+                    <div id="tool-distribution" class="collapse">
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-6">
@@ -199,6 +202,25 @@
                                         <!-- Tool verbosity table will be populated here -->
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Termination Checks -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5>
+                            <button class="btn btn-link collapsed p-0 text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#termination-checks" aria-expanded="false">
+                                <i class="fas fa-stop-circle"></i> Termination Checks
+                                <i class="fas fa-chevron-down float-end"></i>
+                            </button>
+                        </h5>
+                    </div>
+                    <div id="termination-checks" class="collapse">
+                        <div class="card-body">
+                            <div id="termination-checks-table" class="table-responsive">
+                                <!-- Termination checks table will be populated here -->
                             </div>
                         </div>
                     </div>

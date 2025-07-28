@@ -64,6 +64,7 @@ async function loadMetrics() {
         updateHeaderMetrics();
         renderTokenAnalytics();
         renderToolDistribution();
+        renderTerminationChecks();
     } catch (error) {
         showError('Failed to load metrics: ' + error.message);
     }
@@ -407,10 +408,13 @@ function renderFunctionResultDetails(message) {
 
 // Render assistant message details
 function renderAssistantDetails(message) {
+    const content = message.content || 'No content';
+    const renderedContent = content !== 'No content' ? marked.parse(content) : content;
+    
     return `
         <div class="message-content">
             <h6><i class="fas fa-robot"></i> Assistant Message</h6>
-            <div>${escapeHtml(message.content || 'No content')}</div>
+            <div class="markdown-content">${renderedContent}</div>
         </div>
     `;
 }
@@ -657,6 +661,101 @@ async function updatePricing() {
         
     } catch (error) {
         showError('Failed to update pricing: ' + error.message);
+    }
+}
+
+// Render termination checks section
+function renderTerminationChecks() {
+    if (!metricsData.termination_checks || !metricsData.termination_checks.checks) {
+        return;
+    }
+    
+    const checks = metricsData.termination_checks.checks;
+    const container = document.getElementById('termination-checks-table');
+    
+    if (checks.length === 0) {
+        container.innerHTML = '<p class="text-muted">No termination checks found</p>';
+        return;
+    }
+    
+    let tableHtml = `
+        <table class="table table-sm table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Check #</th>
+                    <th>Decision</th>
+                    <th>Reasoning</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    checks.forEach((check, index) => {
+        const decisionBadge = check.should_terminate ? 'success' : 'warning';
+        const decisionText = check.should_terminate ? 'Complete' : 'Continue';
+        const reasoning = check.reason || '';
+        const reasoningPreview = reasoning.length > 100 ? 
+            reasoning.substring(0, 100) + '...' : reasoning;
+        
+        tableHtml += `
+            <tr>
+                <td><strong>${index + 1}</strong></td>
+                <td><span class="badge bg-${decisionBadge}">${decisionText}</span></td>
+                <td><small>${escapeHtml(reasoningPreview)}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary view-termination-btn" 
+                            data-check-index="${check.index}">
+                        <i class="fas fa-eye"></i> View
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tableHtml += `
+            </tbody>
+        </table>
+    `;
+    
+    container.innerHTML = tableHtml;
+    
+    // Add click handlers for view buttons
+    document.querySelectorAll('.view-termination-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const checkIndex = parseInt(e.target.closest('.view-termination-btn').dataset.checkIndex);
+            selectTerminationCheck(checkIndex);
+        });
+    });
+}
+
+// Select and display termination check details
+async function selectTerminationCheck(messageIndex) {
+    
+    // Clear any active states in sidebar (no sidebar selection for termination)
+    document.querySelectorAll('.message-item-in-loop').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.loop-item').forEach(el => el.classList.remove('active-loop'));
+    
+    // Hide loop navigation
+    const navigation = document.getElementById('loop-navigation');
+    navigation.style.display = 'none';
+    
+    selectedMessageIndex = messageIndex;
+    selectedLoopId = null;
+    
+    // Load and display termination check details
+    try {
+        const response = await fetch(`/api/message/${messageIndex}`);
+        const messageData = await response.json();
+        
+        if (messageData.error) {
+            showError(messageData.error);
+            return;
+        }
+        
+        renderMessageDetails(messageData);
+    } catch (error) {
+        showError('Failed to load termination check details: ' + error.message);
     }
 }
 

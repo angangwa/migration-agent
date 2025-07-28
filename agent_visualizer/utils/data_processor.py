@@ -295,19 +295,25 @@ class DataProcessor:
                 current_loop.append(formatted_msg)
                 
             # End of tool loop - termination check or assistant message without function calls
-            elif msg_type == 'termination' or (msg_type == 'assistant' and in_tool_loop):
+            elif msg_type == 'termination':
                 if in_tool_loop:
+                    # Termination check ends the current tool loop
                     current_loop.append(formatted_msg)
                     loops.append(self._finalize_loop(current_loop, loop_id))
                     loop_id += 1
                     current_loop = []
                     in_tool_loop = False
                 else:
-                    # Standalone message (not part of a loop)
-                    if current_loop:
-                        loops.append(self._finalize_loop(current_loop, loop_id))
-                        loop_id += 1
-                    current_loop = [formatted_msg]
+                    # Standalone termination check - don't create a separate loop, just skip it
+                    pass
+                    
+            elif msg_type == 'assistant' and in_tool_loop:
+                # Assistant message ends the current tool loop
+                current_loop.append(formatted_msg)
+                loops.append(self._finalize_loop(current_loop, loop_id))
+                loop_id += 1
+                current_loop = []
+                in_tool_loop = False
                     
             # Other messages (standalone assistant messages, etc.)
             else:
@@ -359,9 +365,9 @@ class DataProcessor:
         has_function_calls = any(msg.get('type') == 'function_call' for msg in messages)
         has_termination = any(msg.get('type') == 'termination' for msg in messages)
         
-        if has_termination and not has_function_calls:
-            loop_type = 'termination_check'
-        elif has_function_calls:
+        # Since we now skip standalone termination checks, 
+        # termination checks only appear as part of tool loops
+        if has_function_calls:
             loop_type = 'tool_loop'
             if has_termination:
                 loop_type += '_with_check'
@@ -369,15 +375,7 @@ class DataProcessor:
             loop_type = 'reasoning'
             
         # Create summary based on loop content
-        if has_termination and not has_function_calls:
-            # This is primarily a termination check
-            termination_msg = next((msg for msg in messages if msg.get('type') == 'termination'), None)
-            if termination_msg:
-                decision = "Complete" if termination_msg.get('should_terminate') else "Continue"
-                summary = f"Termination Check: {decision}"
-            else:
-                summary = "Termination Check"
-        elif has_function_calls:
+        if has_function_calls:
             unique_tools = list(set(tool_calls))
             summary = f"Tool Loop: {len(tool_calls)} calls to {len(unique_tools)} tools"
             if len(unique_tools) <= 3:
