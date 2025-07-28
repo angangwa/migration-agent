@@ -22,6 +22,9 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 # Import the plugin
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from tools.file_system import FileSystemPlugin
 
 
@@ -430,20 +433,24 @@ class FileSystemPluginTester:
                 test_files.append(file)
         
         test_cases = [
-            # Regular file reading
-            *[(f, None, None, f"Read entire file: {f}") for f in test_files[:3]],
+            # Regular file reading (0 means "not specified" in the plugin)
+            *[(f, 0, 0, f"Read entire file: {f}") for f in test_files[:3]],
             # Line-based reading
             *[(f, 1, 10, f"Read first 10 lines: {f}") for f in test_files[:2]],
             # Error cases
-            ("nonexistent.txt", None, None, "Non-existent file"),
-            (".", None, None, "Try to read directory as file"),
+            ("nonexistent.txt", 0, 0, "Non-existent file"),
+            (".", 0, 0, "Try to read directory as file"),
         ]
         
         for file_path, start_line, num_lines, description in test_cases:
             try:
-                result = await self.plugin.read_file(
-                    file_path, start_line=start_line, num_lines=num_lines
-                )
+                # Only pass start_line and num_lines if they're not 0
+                if start_line == 0 and num_lines == 0:
+                    result = await self.plugin.read_file(file_path)
+                else:
+                    result = await self.plugin.read_file(
+                        file_path, start_line=start_line, num_lines=num_lines
+                    )
                 self.formatter.print_test_result(
                     f"read_file('{file_path}', start={start_line}, lines={num_lines})",
                     result,
@@ -600,8 +607,8 @@ async def main():
     """Main test execution function."""
     import sys
     
-    # Set base path to the migration-agent directory
-    base_path = "/Users/anirudhgangwal/Documents/migration-agent/migration-agent"
+    # Set base path to the consult directory for testing
+    base_path = "/home/agangwal/lseg-migration-agent/migration-agent/consult"
     
     print("🧪 Starting FileSystemPlugin Comprehensive Test Suite")
     print(f"📁 Testing in: {base_path}")

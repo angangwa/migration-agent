@@ -318,10 +318,15 @@ class TreeBuilder:
             stats["max_depth_reached"] = max(stats["max_depth_reached"], depth)
 
             name = current_path.name
+            # Show root directory as "." instead of actual directory name
+            if depth == 0:
+                name = "."
+            
             if name in exclude_patterns and not include_hidden:
                 return
 
-            if not include_hidden and name.startswith("."):
+            # Don't exclude root directory even if it starts with "."
+            if not include_hidden and name.startswith(".") and depth > 0:
                 return
 
             # Prepare the tree branch characters
