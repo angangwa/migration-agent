@@ -1,6 +1,6 @@
-# DiscoveryMemoryPlugin
+# DiscoveryMemoryPlugin - WORK IN PROGRESS
 
-A comprehensive plugin for repository analysis and working memory management designed for the Discovery Agent to analyze multiple code repositories and categorize them into logical components for migration planning.
+A plugin for repository analysis and working memory management designed for the Discovery Agent to analyze multiple code repositories and categorize them into logical components for migration planning.
 
 ## Overview
 
