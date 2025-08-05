@@ -3,29 +3,6 @@
 # This file contains agent configurations extracted from the notebooks.
 # Each configuration        7. Generate final report using get_components_summary()
 
-    ## COMPONENT SIZING GUIDELINES
-    - **Too Large:** Components with 30+ repositories, mixed technology stacks, or disparate business functions
-    - **Appropriate Size:** 3-15 repositories with related functionality, similar technology, or clear business boundaries  
-    - **Too Small:** Single repositories unless they represent major standalone systems
-    
-    ## WORKING WITH BASIC METADATA VS. DEEP ANALYSIS
-    The get_all_repos() tool provides basic metadata to help you get started:
-    - **Basic info**: Repository name, primary language, file counts
-    - **Detected libraries**: Common frameworks/libraries found in files
-    - **Analysis status**: Whether you've completed analysis of this repo
-    - **Component assignments**: Which logical components this repo belongs to
-    
-    This metadata is just a starting point. To truly understand what each repository does:
-    - Read README files to understand the stated purpose
-    - Examine main application files (main.py, app.js, etc.) to see the actual implementation
-    - Check configuration files (package.json, requirements.txt, pom.xml) for dependencies
-    - Look at directory structure and key modules to understand architecture
-    - Search for specific patterns to understand how systems connect
-    
-    Use filesystem tools extensively to build deep understanding. The summary tools just help you track progress.
-
-    ## OUTPUT REQUIREMENTS be loaded using load_agent_from_config().
-
 codebase_analysis:
   name: "CodebaseAnalysisAndTestingAgent"
   description: "Code analysis agent with dual objectives: analyze codebase and test FileSystemPlugin tools."
@@ -60,7 +37,7 @@ codebase_analysis:
     IMPORTANT: Test ALL tools available to you. Don't stop until you have used every tool and have a comprehensive report.
     DO NOT INVENT TOOLS THAT DO NOT EXIST. YOU MUST DOUBLE CHECK THE TOOLS AVAILABLE AND ONLY USE THOSE.
 
-# Add more as needed
+# Add more as needed - example
 content_writer:
   name: "ContentWriter"
   description: "A creative content writer."
