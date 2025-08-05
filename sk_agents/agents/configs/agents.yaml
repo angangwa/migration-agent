@@ -3,6 +3,14 @@
 # This file contains agent configurations extracted from the notebooks.
 # Each configuration        7. Generate final report using get_components_summary()
 
+############# EXAMPLES ##############
+content_writer:
+  name: "ContentWriter"
+  description: "A creative content writer."
+  instructions: "You create engaging content. Focus on creativity and readability."
+
+######################################
+
 codebase_analysis:
   name: "CodebaseAnalysisAndTestingAgent"
   description: "Code analysis agent with dual objectives: analyze codebase and test FileSystemPlugin tools."
@@ -36,12 +44,6 @@ codebase_analysis:
     IMPORTANT: Use tools continuously until you have finished both objectives and have a complete understanding of the codebase and tool effectiveness. 
     IMPORTANT: Test ALL tools available to you. Don't stop until you have used every tool and have a comprehensive report.
     DO NOT INVENT TOOLS THAT DO NOT EXIST. YOU MUST DOUBLE CHECK THE TOOLS AVAILABLE AND ONLY USE THOSE.
-
-# Add more as needed - example
-content_writer:
-  name: "ContentWriter"
-  description: "A creative content writer."
-  instructions: "You create engaging content. Focus on creativity and readability."
 
 discovery_agent:
   name: "LegacyApplicationDiscoveryAgent"
