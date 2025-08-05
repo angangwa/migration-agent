@@ -59,22 +59,20 @@ class DiscoveryMemoryPlugin:
         description="""Get comprehensive inventory of all repositories with basic metadata.
         
         On first call, automatically performs lightweight analysis of all repositories 
-        including language detection, framework identification, and file statistics.
+        including framework detection, file statistics, and line counting.
         Subsequent calls return cached results instantly.
         
         Returns structured data with:
         - Repository names and paths
-        - Primary programming languages with confidence scores
+        - File extension breakdown (top 10 + others)
         - Detected frameworks and technologies
-        - File counts and estimated lines of code
-        - Repository type classification
-        - Analysis status and component assignments
+        - Total files and exact line counts
+        - README presence and component assignments
         
-        This provides the essential metadata the discovery agent needs to get started
-        with repository categorization and component planning.
+        Provides essential metadata for repository categorization and component planning.
         
         Example usage:
-        - get_all_repos() → Analyzes all 92 repos and returns metadata
+        - get_all_repos() → Analyzes all repositories and returns metadata
         - Subsequent calls return cached data for fast access""",
     )
     async def get_all_repos(self) -> Dict[str, Any]:
