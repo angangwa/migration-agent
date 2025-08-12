@@ -48,6 +48,9 @@ class FileSystemPlugin:
         - Suggestions for fixing the problem
         - Alternative functions to try
         
+        NOTE: Default max_results is 100. For large codebases, results may truncate.
+        Use max_results=500 or more specific patterns to see more results.
+        
         Examples:
         - find_files("*.py") → Find all Python files in current directory
         - find_files("**/*.py") → Find all Python files recursively
@@ -82,9 +85,9 @@ class FileSystemPlugin:
                     data=None,
                     error=f"Directory '{search_path}' does not exist",
                     suggestions=[
-                        "Use list_directory() to see available directories",
-                        "Check if the path is relative to the base directory",
-                        f"Current base directory: {self._base_path}",
+                        "Use '.' to search in current directory",
+                        "Use list_directory() to see available subdirectories",
+                        "Ensure path is relative to your working directory",
                     ],
                 ).model_dump()
 
@@ -511,11 +514,18 @@ class FileSystemPlugin:
         - Clear explanation of search failures
         - Suggestions for improving search patterns
         
+        NOTE: Default max_results is 50. For large codebases, searches may truncate.
+        Use max_results=200 or more specific patterns to see more results.
+        
+        FUZZY SEARCH: Set fuzzy=true to enable approximate matching (finds "FileSystem" when 
+        searching for "FileSistem"). Uses reasonable similarity threshold automatically.
+        
         Examples:
         - search_in_files("TODO", ["*.py"]) → Find TODO comments in Python files
         - search_in_files("class.*Controller", ["**/*.java"]) → Find controller classes
         - search_in_files("import.*boto3", ["**/*.py"]) → Find AWS SDK imports
-        - search_in_files("password|secret|key", ["**/*.env", "**/*.config"]) → Security scan""",
+        - search_in_files("password|secret|key", ["**/*.env", "**/*.config"]) → Security scan
+        - search_in_files("FileSystem", ["**/*.py"], fuzzy=true) → Find similar matches""",
     )
     async def search_in_files(
         self,
@@ -531,6 +541,9 @@ class FileSystemPlugin:
         include_context: Annotated[
             bool, "Include surrounding lines (default: True)"
         ] = True,
+        fuzzy: Annotated[
+            bool, "Enable fuzzy/approximate matching (default: False)"
+        ] = False,
     ) -> Dict[str, Any]:
         """Search files with enhanced context and metadata."""
         try:
@@ -546,9 +559,9 @@ class FileSystemPlugin:
                     data=None,
                     error=f"Search directory '{search_path}' not found or not a directory",
                     suggestions=[
-                        "Use list_directory() to find valid directories",
-                        "Check if the path is relative to the base directory",
                         "Use '.' to search in current directory",
+                        "Use list_directory() to find valid subdirectories", 
+                        "Ensure path is relative to your working directory",
                     ],
                 ).model_dump()
 
@@ -585,7 +598,7 @@ class FileSystemPlugin:
                         continue
                     
                     file_matches = self.helpers.search_in_file(
-                        file_path, regex, remaining_matches, include_context
+                        file_path, regex, remaining_matches, include_context, fuzzy, pattern
                     )
 
                     if file_matches:
@@ -597,6 +610,18 @@ class FileSystemPlugin:
             suggestions = self.suggestions.generate_search_suggestions(
                 pattern, matches_by_file, files_searched, total_matches, max_results
             )
+            
+            # Add fuzzy search suggestion if no matches and fuzzy not used
+            if total_matches == 0 and not fuzzy:
+                suggestions.append("Try fuzzy=true for approximate matching (finds typos and similar words)")
+            elif fuzzy and total_matches > 0:
+                # Check if any matches were fuzzy
+                has_fuzzy_matches = any(
+                    any(match.get('fuzzy_match', False) for match in matches)
+                    for matches in matches_by_file.values()
+                )
+                if has_fuzzy_matches:
+                    suggestions.append("Some results are fuzzy matches (similar to your search term)")
 
             # Deduplicate suggestions
             suggestions = self.suggestions.deduplicate_suggestions(suggestions)

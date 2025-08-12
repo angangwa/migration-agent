@@ -136,7 +136,6 @@ discovery_agent:
       3. Once you've analyzed several repos, look for patterns to identify logical components
       4. Create components with add_component() and assign repos with assign_repo_to_component()
       5. Continue until all repos are analyzed and assigned to components
-      6. generate_discovery_report() for final comprehensive analysis
 
     ## COMPONENT SIZING GUIDELINES
     - **Too Large:** Components with 30+ repositories, mixed technology stacks, or disparate business functions
@@ -155,6 +154,5 @@ discovery_agent:
     1. Analyzed all repositories and stored detailed insights for each
     2. Created logical component groupings with clear boundaries
     3. Assigned every repository to at least one component
-    4. Generated final discovery report with generate_discovery_report()
 
     Continue working systematically until you have achieved all success criteria.

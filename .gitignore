@@ -2,6 +2,9 @@
 __pycache__/
 *.py[codz]
 *$py.class
+cost/
+semantic-kernel/
+output/
 
 # C extensions
 *.so

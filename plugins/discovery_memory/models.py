@@ -11,11 +11,6 @@ from datetime import datetime
 from enum import Enum
 
 
-class AnalysisStatus(str, Enum):
-    """Repository analysis status."""
-    PENDING = "pending"
-    ANALYZED = "analyzed" 
-    DETAILED = "detailed"  # Has both automated analysis + agent insights
 
 
 class RepositoryType(str, Enum):
@@ -52,26 +47,6 @@ class TechnologyStack(BaseModel):
         default_factory=list,
         description="Detected frameworks (Spring Boot, Django, Express, etc.)"
     )
-    databases: List[str] = Field(
-        default_factory=list,
-        description="Database technologies (MySQL, PostgreSQL, MongoDB, etc.)"
-    )
-    message_queues: List[str] = Field(
-        default_factory=list,
-        description="Message queue technologies (RabbitMQ, Kafka, etc.)"
-    )
-    ci_cd_tools: List[str] = Field(
-        default_factory=list,
-        description="CI/CD tools detected (GitHub Actions, Jenkins, etc.)"
-    )
-    containerization: List[str] = Field(
-        default_factory=list,
-        description="Container technologies (Docker, Kubernetes, etc.)"
-    )
-    infrastructure_tools: List[str] = Field(
-        default_factory=list,
-        description="Infrastructure tools (Terraform, Helm, etc.)"
-    )
 
 
 class RepoMetadata(BaseModel):
@@ -79,10 +54,10 @@ class RepoMetadata(BaseModel):
     name: str = Field(description="Repository name")
     path: str = Field(description="Relative path from base repos directory")
     
-    # Analysis status
-    analysis_status: AnalysisStatus = Field(
-        default=AnalysisStatus.PENDING,
-        description="Current analysis status"
+    # Discovery phase status  
+    discovery_phase_status: str = Field(
+        default="No insights added. Assigned to no components.",
+        description="Natural language status of discovery progress"
     )
     last_analyzed: Optional[datetime] = Field(
         default=None,
@@ -96,7 +71,6 @@ class RepoMetadata(BaseModel):
         description="File counts by extension"
     )
     total_lines: int = Field(default=0, description="Total lines of code (exact count)")
-    repository_size: int = Field(default=0, description="Repository size in bytes")
     
     # Technology information
     technology_stack: TechnologyStack = Field(
@@ -112,10 +86,6 @@ class RepoMetadata(BaseModel):
     
     # Documentation
     has_readme: bool = Field(default=False, description="Has README file")
-    documentation_files: List[str] = Field(
-        default_factory=list,
-        description="List of documentation files found"
-    )
     
     # Dependencies (basic detection)
     config_files: List[str] = Field(
@@ -135,11 +105,22 @@ class RepoMetadata(BaseModel):
         description="Components this repository is assigned to"
     )
     
-    # Analysis confidence
-    analysis_confidence: float = Field(
-        default=0.0,
-        description="Confidence score of automated analysis (0.0-1.0)"
-    )
+    def update_discovery_status(self):
+        """Update discovery phase status based on current state."""
+        has_insights = bool(self.insights)
+        has_components = bool(self.assigned_components)
+        
+        if has_insights and has_components:
+            component_list = ", ".join(self.assigned_components)
+            self.discovery_phase_status = f"Insights added. Assigned to components: {component_list}."
+        elif has_insights and not has_components:
+            self.discovery_phase_status = "Insights added. Assigned to no components."
+        elif not has_insights and has_components:
+            component_list = ", ".join(self.assigned_components)
+            self.discovery_phase_status = f"No insights added. Assigned to components: {component_list}."
+        else:
+            self.discovery_phase_status = "No insights added. Assigned to no components."
+    
 
 
 class ComponentData(BaseModel):
@@ -158,17 +139,6 @@ class ComponentData(BaseModel):
     created_at: datetime = Field(
         default_factory=datetime.now,
         description="When component was created"
-    )
-    
-    # Analysis summary
-    technology_summary: Dict[str, int] = Field(
-        default_factory=dict,
-        description="Summary of technologies used across repositories"
-    )
-    
-    estimated_complexity: str = Field(
-        default="unknown",
-        description="Estimated migration complexity (low/medium/high)"
     )
 
 
@@ -189,8 +159,7 @@ class AnalysisState(BaseModel):
     
     # Progress tracking
     total_repositories: int = Field(default=0, description="Total repositories found")
-    analyzed_repositories: int = Field(default=0, description="Repositories with automated analysis")
-    detailed_repositories: int = Field(default=0, description="Repositories with agent insights")
+    repositories_with_insights: int = Field(default=0, description="Repositories with agent insights")
     
     # Analysis metadata
     analysis_started: Optional[datetime] = Field(
@@ -210,26 +179,33 @@ class AnalysisState(BaseModel):
     base_repos_path: str = Field(description="Base path to repositories")
     
     def get_progress_summary(self) -> Dict[str, Any]:
-        """Get analysis progress summary."""
+        """Get discovery progress summary."""
+        # Calculate current status counts
+        insights_added = len([repo for repo in self.repositories.values() if repo.insights])
+        assigned_repos = len([repo for repo in self.repositories.values() if repo.assigned_components])
+        
         return {
             "total_repositories": self.total_repositories,
-            "analyzed_repositories": self.analyzed_repositories,
-            "repositories_with_agent_insights": self.detailed_repositories,  # Clarified meaning
-            "unanalyzed_count": self.total_repositories - self.analyzed_repositories,
-            "analysis_progress": (
-                self.analyzed_repositories / self.total_repositories * 100 
-                if self.total_repositories > 0 else 0
-            ),
-            "investigation_progress": (
-                self.detailed_repositories / self.total_repositories * 100 
-                if self.total_repositories > 0 else 0
-            ),
+            "repositories_with_insights": insights_added,
+            "repositories_assigned_to_components": assigned_repos,
             "components_created": len(self.components),
-            "unassigned_repos": len([
-                repo for repo in self.repositories.values()
-                if not repo.assigned_components
-            ])
+            "unassigned_repos": self.total_repositories - assigned_repos,
+            "investigation_progress": (
+                insights_added / self.total_repositories * 100 
+                if self.total_repositories > 0 else 0
+            ),
+            "assignment_progress": (
+                assigned_repos / self.total_repositories * 100
+                if self.total_repositories > 0 else 0
+            )
         }
+    
+    def needs_investigation(self) -> bool:
+        """Check if any repositories still need investigation or assignment."""
+        return any(
+            not repo.insights or not repo.assigned_components
+            for repo in self.repositories.values()
+        )
 
 
 # File extension to language mappings for analysis

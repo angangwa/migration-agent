@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Optional, Set
 from collections import defaultdict, Counter
 
 from .models import (
-    RepoMetadata, TechnologyStack, RepositoryType, AnalysisStatus,
+    RepoMetadata, TechnologyStack, RepositoryType,
     LANGUAGE_MAPPINGS, CONFIG_PATTERNS, FRAMEWORK_PATTERNS
 )
 
@@ -62,8 +62,7 @@ class RepositoryAnalyzer:
         # Initialize metadata
         metadata = RepoMetadata(
             name=repo_name,
-            path=relative_path,
-            analysis_status=AnalysisStatus.PENDING
+            path=relative_path
         )
         
         try:
@@ -72,7 +71,6 @@ class RepositoryAnalyzer:
             metadata.total_files = file_stats['total_files']
             metadata.file_counts = file_stats['file_counts']
             metadata.total_lines = file_stats['total_lines']
-            metadata.repository_size = file_stats['repository_size']
             
             # Language detection
             metadata.technology_stack.primary_languages = self._detect_languages(
@@ -95,23 +93,14 @@ class RepositoryAnalyzer:
             # Documentation detection
             doc_info = self._analyze_documentation(repo_path)
             metadata.has_readme = doc_info['has_readme']
-            metadata.documentation_files = doc_info['doc_files']
             
-            # CI/CD detection
-            metadata.technology_stack.ci_cd_tools = self._detect_cicd(repo_path)
-            
-            # Container/Infrastructure detection
-            metadata.technology_stack.containerization = self._detect_containerization(repo_path)
-            metadata.technology_stack.infrastructure_tools = self._detect_infrastructure(repo_path)
-            
-            # Database detection (basic)
-            metadata.technology_stack.databases = self._detect_databases(repo_path, config_files)
+            # Skip unused technology detection that is not exposed to LLM
             
             # Set analysis confidence based on data completeness
             metadata.analysis_confidence = self._calculate_confidence(metadata)
             
-            # Mark as analyzed
-            metadata.analysis_status = AnalysisStatus.ANALYZED
+            # Update discovery status
+            metadata.update_discovery_status()
             
         except Exception as e:
             # On error, return partial metadata with error info
@@ -499,80 +488,12 @@ class RepositoryAnalyzer:
                         has_readme = True
         
         return {
-            'has_readme': has_readme,
-            'doc_files': doc_files
+            'has_readme': has_readme
         }
     
-    def _detect_cicd(self, repo_path: Path) -> List[str]:
-        """Detect CI/CD tools."""
-        cicd_tools = []
-        
-        cicd_indicators = {
-            '.github/workflows': 'GitHub Actions',
-            '.gitlab-ci.yml': 'GitLab CI',
-            'Jenkinsfile': 'Jenkins',
-            '.circleci/config.yml': 'CircleCI',
-            'azure-pipelines.yml': 'Azure DevOps',
-            'bitbucket-pipelines.yml': 'Bitbucket Pipelines'
-        }
-        
-        for indicator, tool in cicd_indicators.items():
-            if (repo_path / indicator).exists():
-                cicd_tools.append(tool)
-        
-        return cicd_tools
     
-    def _detect_containerization(self, repo_path: Path) -> List[str]:
-        """Detect containerization technologies."""
-        container_tools = []
-        
-        if (repo_path / 'Dockerfile').exists():
-            container_tools.append('Docker')
-        
-        if (repo_path / 'docker-compose.yml').exists() or (repo_path / 'docker-compose.yaml').exists():
-            container_tools.append('Docker Compose')
-        
-        return container_tools
     
-    def _detect_infrastructure(self, repo_path: Path) -> List[str]:
-        """Detect infrastructure as code tools."""
-        infra_tools = []
-        
-        if any((repo_path / 'terraform').exists() for _ in [True]):
-            infra_tools.append('Terraform')
-        
-        if any(repo_path.glob('*.tf')):
-            infra_tools.append('Terraform')
-        
-        if (repo_path / 'helm').exists() or any(repo_path.glob('**/Chart.yaml')):
-            infra_tools.append('Helm')
-        
-        if (repo_path / 'k8s').exists() or (repo_path / 'kubernetes').exists():
-            infra_tools.append('Kubernetes')
-        
-        return infra_tools
     
-    def _detect_databases(self, repo_path: Path, config_files: List[str]) -> List[str]:
-        """Basic database technology detection."""
-        databases = []
-        
-        # Simple pattern matching in config files
-        if 'package.json' in config_files:
-            try:
-                with open(repo_path / 'package.json', 'r') as f:
-                    content = f.read().lower()
-                if 'mysql' in content:
-                    databases.append('MySQL')
-                if 'postgres' in content or 'postgresql' in content:
-                    databases.append('PostgreSQL')
-                if 'mongodb' in content or 'mongoose' in content:
-                    databases.append('MongoDB')
-                if 'redis' in content:
-                    databases.append('Redis')
-            except:
-                pass
-        
-        return databases
     
     def _calculate_confidence(self, metadata: RepoMetadata) -> float:
         """Calculate analysis confidence score."""

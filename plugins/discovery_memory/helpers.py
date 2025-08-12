@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from datetime import datetime
 
-from .models import RepoMetadata, ComponentData, AnalysisState, AnalysisStatus
+from .models import RepoMetadata, ComponentData, AnalysisState
 
 
 class ParallelProcessor:
@@ -72,8 +72,7 @@ class ParallelProcessor:
                     # Create error metadata for failed analysis
                     error_metadata = RepoMetadata(
                         name=repo_name,
-                        path=str(repo_path.relative_to(repo_path.parent.parent)),
-                        analysis_status=AnalysisStatus.PENDING
+                        path=str(repo_path.relative_to(repo_path.parent.parent))
                     )
                     error_metadata.insights['analysis_error'] = str(e)
                     results[repo_name] = error_metadata
@@ -206,8 +205,8 @@ class ReportGenerator:
             "## Executive Summary",
             "",
             f"- **Total Repositories:** {progress['total_repositories']}",
-            f"- **Analyzed Repositories:** {progress['analyzed_repositories']} ({progress['analysis_progress']:.1f}%)",
-            f"- **Detailed Analysis:** {progress['detailed_repositories']}",
+            f"- **Investigation Progress:** {progress['investigation_progress']:.1f}%",
+            f"- **Repositories with Insights:** {progress['repositories_with_insights']}",
             f"- **Logical Components:** {progress['components_created']}",
             f"- **Unassigned Repositories:** {progress['unassigned_repos']}",
             ""
@@ -219,15 +218,31 @@ class ReportGenerator:
             ""
         ])
         
-        # Group repositories by analysis status
-        by_status = {'analyzed': [], 'detailed': [], 'pending': []}
+        # Group repositories by discovery phase status
+        by_status = {
+            'complete': [],  # Has insights and assigned to components
+            'needs_assignment': [],  # Has insights but not assigned
+            'needs_investigation': []  # No insights
+        }
+        
         for repo_name, repo_data in state.repositories.items():
-            by_status[repo_data.analysis_status.value].append((repo_name, repo_data))
+            if repo_data.insights and repo_data.assigned_components:
+                by_status['complete'].append((repo_name, repo_data))
+            elif repo_data.insights and not repo_data.assigned_components:
+                by_status['needs_assignment'].append((repo_name, repo_data))
+            else:
+                by_status['needs_investigation'].append((repo_name, repo_data))
+        
+        status_titles = {
+            'complete': 'Complete (Has Insights & Assigned)',
+            'needs_assignment': 'Needs Component Assignment',
+            'needs_investigation': 'Needs Investigation'
+        }
         
         for status, repos in by_status.items():
             if repos:
                 report_lines.extend([
-                    f"### {status.title()} Repositories ({len(repos)})",
+                    f"### {status_titles[status]} ({len(repos)})",
                     ""
                 ])
                 
@@ -241,7 +256,7 @@ class ReportGenerator:
                         f"- Languages: {languages or 'Unknown'}",
                         f"- Frameworks: {frameworks or 'None detected'}",
                         f"- Files: {repo_data.total_files:,}",
-                        f"- Est. LOC: {repo_data.estimated_loc:,}",
+                        f"- Lines: {repo_data.total_lines:,}",
                         f"- Components: {', '.join(repo_data.assigned_components) or 'Unassigned'}",
                         ""
                     ])
@@ -380,12 +395,12 @@ class ReportGenerator:
                 ""
             ])
         
-        # Check analysis progress
+        # Check investigation progress
         progress = state.get_progress_summary()
-        if progress['analysis_progress'] < 100:
-            remaining = progress['total_repositories'] - progress['analyzed_repositories']
+        if progress['investigation_progress'] < 100:
+            remaining = progress['total_repositories'] - progress['repositories_with_insights']
             recommendations.extend([
-                f"3. **Complete analysis** of {remaining} remaining repositories",
+                f"3. **Complete investigation** of {remaining} remaining repositories",
                 "   - Use filesystem tools to understand repository purposes",
                 "   - Store detailed insights using store_repo_insights()",
                 ""
@@ -393,7 +408,7 @@ class ReportGenerator:
         
         if not recommendations:
             recommendations.extend([
-                "1. **Analysis appears complete** - all repositories analyzed and assigned",
+                "1. **Discovery appears complete** - all repositories have insights and are assigned",
                 "2. **Ready for next phase** - detailed migration planning can begin",
                 ""
             ])

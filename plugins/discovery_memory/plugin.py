@@ -13,7 +13,7 @@ from datetime import datetime
 from semantic_kernel.functions import kernel_function
 
 from .models import (
-    PluginResponse, RepoMetadata, ComponentData, AnalysisState, AnalysisStatus
+    PluginResponse, RepoMetadata, ComponentData, AnalysisState
 )
 from .analyzer import RepositoryAnalyzer
 from .storage import DiscoveryStorage
@@ -97,7 +97,8 @@ class DiscoveryMemoryPlugin:
                     'total_files': repo_metadata.total_files,
                     'total_lines': repo_metadata.total_lines,
                     'has_readme': repo_metadata.has_readme,
-                    'assigned_components': repo_metadata.assigned_components
+                    'assigned_components': repo_metadata.assigned_components,
+                    'discovery_status': repo_metadata.discovery_phase_status
                 }
             
             progress = self.state.get_progress_summary()
@@ -106,10 +107,10 @@ class DiscoveryMemoryPlugin:
                 success=True,
                 data=repos_data,
                 suggestions=[
-                    "Use get_unanalyzed_repos() to find repositories needing detailed analysis",
-                    "Explore high-value repositories first (large codebases, core frameworks)",
+                    "Use get_unanalyzed_repos() to find repositories needing investigation or assignment",
+                    "Investigate repositories using filesystem tools to understand their purpose",
                     "Store insights with store_repo_insights() after investigating each repository",
-                    "Group related repositories into logical components with add_component()"
+                    "Create logical components with add_component() and assign repositories to them"
                 ],
                 metadata=progress
             ).model_dump()
@@ -127,34 +128,32 @@ class DiscoveryMemoryPlugin:
 
     @kernel_function(
         name="get_unanalyzed_repos",
-        description="""Get repositories that need deeper exploration and analysis.
+        description="""Get repositories that need investigation or component assignment.
         
-        Returns repositories that have only basic automated analysis but lack
-        detailed insights from agent exploration. These are candidates for 
-        deeper investigation using filesystem tools.
+        Returns repositories that either:
+        1. Need investigation: No insights have been added by agents yet
+        2. Need assignment: Have insights but are not assigned to any components
         
-        Focuses agent attention on repos that need manual exploration to
-        understand their true purpose, architecture, and component assignment.
+        Use this to systematically work through repositories to complete
+        the discovery process. Investigation involves using filesystem tools
+        to understand repository purpose, then storing insights.
         
         Returns:
-        - Repository names and basic metadata
-        - Analysis status and confidence scores
-        - Suggestions for investigation approaches
+        - Repository names and basic metadata  
+        - Current discovery phase status
+        - Suggestions for next steps
         
-        Use this to systematically work through repositories that need
-        detailed analysis before component assignment.""",
+        Essential for ensuring all repositories are fully analyzed and assigned.""",
     )
     async def get_unanalyzed_repos(self) -> Dict[str, Any]:
-        """Get repositories that need deeper analysis."""
+        """Get repositories that need investigation or component assignment."""
         
         try:
             unanalyzed = {}
             
             for repo_name, repo_metadata in self.state.repositories.items():
-                # Consider repos that are only auto-analyzed or have low confidence
+                # Consider repos that need investigation or assignment
                 needs_analysis = (
-                    repo_metadata.analysis_status == AnalysisStatus.ANALYZED or
-                    repo_metadata.analysis_confidence < 0.8 or
                     not repo_metadata.insights or
                     not repo_metadata.assigned_components
                 )
@@ -171,26 +170,27 @@ class DiscoveryMemoryPlugin:
                         'total_files': repo_metadata.total_files,
                         'total_lines': repo_metadata.total_lines,
                         'has_readme': repo_metadata.has_readme,
-                        'has_insights': bool(repo_metadata.insights),
-                        'assigned_components': repo_metadata.assigned_components,
+                        'discovery_status': repo_metadata.discovery_phase_status,
                         'suggested_investigation': self._get_investigation_suggestions(repo_metadata)
                     }
             
             suggestions = []
             if unanalyzed:
-                # Prioritize suggestions based on repository characteristics
-                high_priority = [repo for repo in unanalyzed.values() if repo['total_lines'] > 5000 or repo['frameworks']]
+                needs_insights = [repo for repo in unanalyzed.values() if "No insights" in repo['discovery_status']]
+                needs_assignment = [repo for repo in unanalyzed.values() if "Insights added. Assigned to no components" in repo['discovery_status']]
+                
                 suggestions.extend([
-                    f"{len(unanalyzed)} repositories need investigation",
-                    f"Start with {len(high_priority)} high-priority repositories (large or with frameworks)",
-                    "Examine README, main entry points, and configuration files",
-                    "Store findings with store_repo_insights() for each repository investigated"
+                    f"{len(unanalyzed)} repositories need attention",
+                    f"{len(needs_insights)} repositories need investigation (use filesystem tools)",
+                    f"{len(needs_assignment)} repositories need component assignment",
+                    "Store findings with store_repo_insights() after investigating each repository",
+                    "Assign repositories to components with assign_repo_to_component()"
                 ])
             else:
                 suggestions.extend([
-                    "All repositories investigated - ready for component creation",
-                    "Create logical components with add_component()",
-                    "Review component assignments with get_components_summary()"
+                    "All repositories have insights and are assigned to components",
+                    "Discovery phase complete - ready to generate final report",
+                    "Use generate_discovery_report() to create comprehensive report"
                 ])
             
             return PluginResponse(
@@ -198,9 +198,9 @@ class DiscoveryMemoryPlugin:
                 data=unanalyzed,
                 suggestions=suggestions,
                 metadata={
-                    'unanalyzed_count': len(unanalyzed),
+                    'repositories_needing_attention': len(unanalyzed),
                     'total_repos': len(self.state.repositories),
-                    'analysis_progress': (len(self.state.repositories) - len(unanalyzed)) / len(self.state.repositories) * 100 if self.state.repositories else 0
+                    'discovery_completion': (len(self.state.repositories) - len(unanalyzed)) / len(self.state.repositories) * 100 if self.state.repositories else 0
                 }
             ).model_dump()
             
@@ -209,8 +209,8 @@ class DiscoveryMemoryPlugin:
                 success=False,
                 error=f"Failed to get unanalyzed repositories: {str(e)}",
                 suggestions=[
-                    "Check if initial repository analysis has been completed",
-                    "Try running get_all_repos() first to ensure repositories are loaded"
+                    "Check if repositories have been loaded with get_all_repos()",
+                    "Ensure repository discovery has been initiated"
                 ]
             ).model_dump()
 
@@ -266,12 +266,12 @@ class DiscoveryMemoryPlugin:
             # Update repository with insights
             repo_metadata = self.state.repositories[repo_name]
             repo_metadata.insights.update(insights)
-            repo_metadata.analysis_status = AnalysisStatus.DETAILED
+            repo_metadata.update_discovery_status()
             
             # Update progress counters
-            self.state.detailed_repositories = len([
+            self.state.repositories_with_insights = len([
                 repo for repo in self.state.repositories.values() 
-                if repo.analysis_status == AnalysisStatus.DETAILED
+                if repo.insights
             ])
             
             # Store updated metadata
@@ -284,13 +284,13 @@ class DiscoveryMemoryPlugin:
                     'repo_name': repo_name,
                     'insights_stored': len(insights),
                     'total_insights': len(repo_metadata.insights),
-                    'analysis_status': repo_metadata.analysis_status.value
+                    'discovery_status': repo_metadata.discovery_phase_status
                 },
                 suggestions=[
                     f"Successfully stored insights for {repo_name}",
-                    "Continue analyzing other repositories with get_unanalyzed_repos()",
-                    "Consider component assignment once you understand repository patterns",
-                    "Use add_component() to create logical groupings"
+                    "Repository discovery status updated automatically",
+                    "Continue with other repositories using get_unanalyzed_repos()",
+                    "Assign repository to components when ready with assign_repo_to_component()"
                 ],
                 metadata={
                     'insights_keys': list(insights.keys()),
@@ -631,8 +631,8 @@ class DiscoveryMemoryPlugin:
             
             # Check if ready for report generation
             readiness_issues = []
-            if progress['analysis_progress'] < 90:
-                readiness_issues.append(f"Only {progress['analysis_progress']:.1f}% of repositories analyzed")
+            if progress['investigation_progress'] < 90:
+                readiness_issues.append(f"Only {progress['investigation_progress']:.1f}% of repositories have insights")
             if validation_results['assignment_coverage'] < 90:
                 readiness_issues.append(f"Only {validation_results['assignment_coverage']:.1f}% of repositories assigned to components")
             if not self.state.components:
@@ -648,9 +648,9 @@ class DiscoveryMemoryPlugin:
                 ])
             else:
                 suggestions.extend([
-                    "Discovery analysis complete! Report generated successfully.",
-                    "Ready for handoff to detailed migration planning teams.",
-                    "All repositories analyzed and assigned to logical components."
+                    "Discovery phase complete! Report generated successfully.",
+                    "Ready for handoff to migration planning teams.",
+                    "All repositories have insights and are assigned to logical components."
                 ])
             
             return PluginResponse(
@@ -682,10 +682,10 @@ class DiscoveryMemoryPlugin:
                 success=False,
                 error=f"Failed to generate discovery report: {str(e)}",
                 suggestions=[
-                    "Ensure repositories have been analyzed with get_all_repos()",
+                    "Ensure repositories have been loaded with get_all_repos()",
+                    "Add insights to repositories with store_repo_insights()",
                     "Create components with add_component() before generating report",
-                    "Assign repositories to components with assign_repo_to_component()",
-                    "Check that analysis state is valid and complete"
+                    "Assign repositories to components with assign_repo_to_component()"
                 ]
             ).model_dump()
 
@@ -729,14 +729,10 @@ class DiscoveryMemoryPlugin:
                     self.state.repositories[repo_name] = metadata
                     self.storage.update_repository(repo_name, metadata)
             
-            # Update analysis progress counters
-            self.state.analyzed_repositories = len([
+            # Update progress counters
+            self.state.repositories_with_insights = len([
                 repo for repo in self.state.repositories.values() 
-                if repo.analysis_status in [AnalysisStatus.ANALYZED, AnalysisStatus.DETAILED]
-            ])
-            self.state.detailed_repositories = len([
-                repo for repo in self.state.repositories.values() 
-                if repo.analysis_status == AnalysisStatus.DETAILED
+                if repo.insights
             ])
             
             # Mark analysis as complete
@@ -760,7 +756,8 @@ class DiscoveryMemoryPlugin:
                     'total_files': repo_metadata.total_files,
                     'total_lines': repo_metadata.total_lines,
                     'has_readme': repo_metadata.has_readme,
-                    'assigned_components': repo_metadata.assigned_components
+                    'assigned_components': repo_metadata.assigned_components,
+                    'discovery_status': repo_metadata.discovery_phase_status
                 }
             
             progress = self.state.get_progress_summary()
@@ -769,9 +766,9 @@ class DiscoveryMemoryPlugin:
                 success=True,
                 data=repos_data,
                 suggestions=[
-                    "Repository analysis complete - proceed to detailed investigation",
-                    "Use get_unanalyzed_repos() to find repositories needing investigation",
-                    "Prioritize repositories with complex frameworks or large codebases",
+                    "Repository discovery initiated - proceed to investigation phase",
+                    "Use get_unanalyzed_repos() to find repositories needing investigation or assignment",
+                    "Investigate repositories using filesystem tools to understand their purpose",
                     "Store findings with store_repo_insights() after exploring each repository"
                 ],
                 metadata=progress

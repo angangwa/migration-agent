@@ -195,6 +195,7 @@ class DiscoveryStorage:
                 repo = self._state_cache.repositories[repo_name]
                 if component_name not in repo.assigned_components:
                     repo.assigned_components.append(component_name)
+                    repo.update_discovery_status()
             
             # Update component
             if component_name in self._state_cache.components:
@@ -287,14 +288,11 @@ class DiscoveryStorage:
             return
         
         total = len(self._state_cache.repositories)
-        analyzed = sum(1 for repo in self._state_cache.repositories.values() 
-                      if repo.analysis_status.value in ['analyzed', 'detailed'])
-        detailed = sum(1 for repo in self._state_cache.repositories.values() 
-                      if repo.analysis_status.value == 'detailed')
+        insights_count = sum(1 for repo in self._state_cache.repositories.values() 
+                            if repo.insights)
         
         self._state_cache.total_repositories = total
-        self._state_cache.analyzed_repositories = analyzed
-        self._state_cache.detailed_repositories = detailed
+        self._state_cache.repositories_with_insights = insights_count
     
     def clear_cache(self):
         """Clear in-memory cache to force reload from disk."""

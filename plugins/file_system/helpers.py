@@ -8,6 +8,7 @@ the main FileSystemPlugin operations.
 import re
 import json
 import fnmatch
+import difflib
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -109,6 +110,8 @@ class FileSystemHelpers:
         regex: re.Pattern,
         max_matches: int,
         include_context: bool,
+        fuzzy: bool = False,
+        original_pattern: str = "",
     ) -> List[Dict[str, Any]]:
         """Search for pattern in a single file."""
         matches = []
@@ -122,8 +125,25 @@ class FileSystemHelpers:
                     break
 
                 match = regex.search(line)
-                if match:
+                fuzzy_match = False
+                
+                # If no exact match and fuzzy enabled, try fuzzy matching
+                if not match and fuzzy and original_pattern:
+                    # Use difflib for fuzzy matching with reasonable threshold
+                    words_in_line = line.split()
+                    for word in words_in_line:
+                        # Check similarity - 0.7 threshold works well for typos
+                        similarity = difflib.SequenceMatcher(None, original_pattern.lower(), word.lower()).ratio()
+                        if similarity >= 0.7:
+                            fuzzy_match = True
+                            break
+                
+                if match or fuzzy_match:
                     match_data = {"line": i + 1, "content": line.rstrip("\n")}
+                    
+                    # Add fuzzy indicator if it was a fuzzy match
+                    if fuzzy_match and not match:
+                        match_data["fuzzy_match"] = True
 
                     if include_context:
                         context = {}

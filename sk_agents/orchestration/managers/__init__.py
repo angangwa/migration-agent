@@ -6,7 +6,9 @@ the base Semantic Kernel GroupChatManager functionality.
 """
 
 from .single_agent import SingleAgentGroupChatManager
+from .discovery_agent_manager import DiscoveryAgentGroupChatManager
 
 __all__ = [
-    "SingleAgentGroupChatManager"
+    "SingleAgentGroupChatManager",
+    "DiscoveryAgentGroupChatManager"
 ]
