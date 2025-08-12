@@ -249,13 +249,18 @@ class ReportGenerator:
                 for repo_name, repo_data in sorted(repos):
                     # Build technical details only if we have actual data
                     tech_details = []
-                    if repo_data.technology_stack.primary_languages:
-                        languages = ", ".join([f"{lang} ({conf:.1%})" for lang, conf in repo_data.technology_stack.primary_languages[:3]])
-                        tech_details.append(f"- Languages: {languages}")
                     
+                    # Show frameworks if detected
                     if repo_data.technology_stack.frameworks:
-                        frameworks = ", ".join(repo_data.technology_stack.frameworks[:3])
+                        frameworks = ", ".join(repo_data.technology_stack.frameworks[:5])  # Show more frameworks
                         tech_details.append(f"- Frameworks: {frameworks}")
+                    
+                    # Show file type breakdown (top file types)
+                    if repo_data.file_counts:
+                        # Get top 5 file types
+                        sorted_files = sorted(repo_data.file_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+                        file_types = ", ".join([f"{ext}: {count}" for ext, count in sorted_files])
+                        tech_details.append(f"- File types: {file_types}")
                     
                     # Always show basic stats
                     tech_details.extend([
@@ -364,25 +369,14 @@ class ReportGenerator:
         if not state.repositories:
             return ""
         
-        language_counts = {}
         framework_counts = {}
         
         for repo_data in state.repositories.values():
-            # Count languages
-            for lang, confidence in repo_data.technology_stack.primary_languages:
-                language_counts[lang] = language_counts.get(lang, 0) + 1
-            
             # Count frameworks
             for framework in repo_data.technology_stack.frameworks:
                 framework_counts[framework] = framework_counts.get(framework, 0) + 1
         
         lines = []
-        
-        if language_counts:
-            lines.append("**Languages:**")
-            for lang, count in sorted(language_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
-                lines.append(f"- {lang}: {count} repositories")
-            lines.append("")
         
         if framework_counts:
             lines.append("**Frameworks:**")

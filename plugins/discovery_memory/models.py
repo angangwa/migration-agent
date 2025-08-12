@@ -39,10 +39,6 @@ class PluginResponse(BaseModel):
 
 class TechnologyStack(BaseModel):
     """Technology stack information for a repository."""
-    primary_languages: List[Tuple[str, float]] = Field(
-        default_factory=list, 
-        description="List of (language, confidence_score) tuples"
-    )
     frameworks: List[str] = Field(
         default_factory=list,
         description="Detected frameworks (Spring Boot, Django, Express, etc.)"
@@ -208,29 +204,6 @@ class AnalysisState(BaseModel):
         )
 
 
-# File extension to language mappings for analysis
-LANGUAGE_MAPPINGS = {
-    ".py": "Python",
-    ".js": "JavaScript", 
-    ".ts": "TypeScript",
-    ".java": "Java",
-    ".go": "Go",
-    ".rs": "Rust",
-    ".cpp": "C++",
-    ".c": "C",
-    ".cs": "C#",
-    ".rb": "Ruby",
-    ".php": "PHP",
-    ".swift": "Swift",
-    ".kt": "Kotlin",
-    ".scala": "Scala",
-    ".clj": "Clojure",
-    ".sh": "Shell",
-    ".sql": "SQL",
-    ".r": "R",
-    ".m": "MATLAB",
-    ".pl": "Perl"
-}
 
 # Configuration file patterns for framework detection
 CONFIG_PATTERNS = {
@@ -338,4 +311,57 @@ FRAMEWORK_PATTERNS = {
     "Elasticsearch": ["elasticsearch"],
     "GraphQL": ["graphql", "apollo"],
     "gRPC": ["grpc", "protobuf"],
+    
+    # Infrastructure as Code
+    "Terraform": ["terraform", "provider", "resource"],
+    "CloudFormation": ["AWSTemplateFormatVersion", "aws::"],
+    "Pulumi": ["@pulumi/", "pulumi."],
+    "Helm": ["Chart.yaml", "helm"],
+    "Ansible": ["ansible", "playbook"],
+    "CDK": ["aws-cdk", "@aws-cdk"],
+    
+    # Cloud Functions & Serverless
+    "AWS Lambda": ["aws-lambda", "lambda_function", "handler"],
+    "Azure Functions": ["azure-functions", "function.json"],
+    "Google Cloud Functions": ["google-cloud-functions", "functions-framework"],
+    "Serverless Framework": ["serverless", "serverless.yml"],
+    
+    # Modern JavaScript Frameworks
+    "Remix": ["@remix-run", "remix"],
+    "SvelteKit": ["@sveltejs/kit", "sveltekit"],
+    "Astro": ["astro", "@astrojs"],
+    "Solid.js": ["solid-js", "@solidjs"],
+    "Qwik": ["@builder.io/qwik", "qwik"],
+    
+    # Data & Analytics
+    "Apache Spark": ["pyspark", "org.apache.spark"],
+    "Apache Airflow": ["airflow", "from airflow"],
+    "dbt": ["dbt-core", "dbt_project.yml"],
+    "Jupyter": [".ipynb", "jupyter"],
+    "Pandas": ["pandas", "import pandas"],
+    "NumPy": ["numpy", "import numpy"],
+    
+    # Testing Frameworks
+    "Jest": ["jest", "@jest/"],
+    "Mocha": ["mocha", "describe("],
+    "Cypress": ["cypress", "@cypress/"],
+    "Playwright": ["@playwright/", "playwright"],
+    "pytest": ["pytest", "import pytest"],
+    "JUnit": ["junit", "org.junit"],
+    "TestNG": ["testng", "org.testng"],
+    "RSpec": ["rspec", "describe "],
+    
+    # Mobile & Desktop
+    "Flutter": ["flutter", "pubspec.yaml"],
+    "React Native": ["react-native", "@react-native"],
+    "Electron": ["electron", "@electron/"],
+    "Tauri": ["@tauri-apps", "tauri"],
+    
+    # Additional Modern Tools
+    "Vite": ["vite", "@vitejs"],
+    "Webpack": ["webpack", "webpack.config"],
+    "esbuild": ["esbuild"],
+    "Rollup": ["rollup", "rollup.config"],
+    "Turbo": ["turbo", "turbo.json"],
+    "Nx": ["@nrwl/nx", "@nx/"],
 }

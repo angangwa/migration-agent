@@ -16,7 +16,7 @@ from collections import defaultdict, Counter
 
 from .models import (
     RepoMetadata, TechnologyStack, RepositoryType,
-    LANGUAGE_MAPPINGS, CONFIG_PATTERNS, FRAMEWORK_PATTERNS
+    CONFIG_PATTERNS, FRAMEWORK_PATTERNS
 )
 
 
@@ -72,10 +72,6 @@ class RepositoryAnalyzer:
             metadata.file_counts = file_stats['file_counts']
             metadata.total_lines = file_stats['total_lines']
             
-            # Language detection
-            metadata.technology_stack.primary_languages = self._detect_languages(
-                file_stats['file_counts']
-            )
             
             # Configuration file detection
             config_files = self._find_config_files(repo_path)
@@ -160,30 +156,6 @@ class RepositoryAnalyzer:
             'files_scanned': files_scanned
         }
     
-    def _detect_languages(self, file_counts: Dict[str, int]) -> List[Tuple[str, float]]:
-        """Detect programming languages based on file extensions."""
-        language_counts = defaultdict(int)
-        total_code_files = 0
-        
-        for ext, count in file_counts.items():
-            if ext in LANGUAGE_MAPPINGS:
-                language = LANGUAGE_MAPPINGS[ext]
-                language_counts[language] += count
-                total_code_files += count
-        
-        if total_code_files == 0:
-            return []
-        
-        # Calculate confidence scores
-        languages = []
-        for language, count in language_counts.items():
-            confidence = count / total_code_files
-            languages.append((language, confidence))
-        
-        # Sort by confidence descending
-        languages.sort(key=lambda x: x[1], reverse=True)
-        
-        return languages[:5]  # Return top 5 languages
     
     def _find_config_files(self, repo_path: Path) -> List[str]:
         """Find configuration files in the repository."""
@@ -244,6 +216,15 @@ class RepositoryAnalyzer:
         # Parse packages.config for .NET Framework
         if 'packages.config' in config_files:
             frameworks.update(self._parse_packages_config(repo_path / 'packages.config'))
+        
+        # Infrastructure as Code detection
+        frameworks.update(self._detect_infrastructure_frameworks(repo_path, config_files))
+        
+        # Cloud and Serverless detection
+        frameworks.update(self._detect_cloud_frameworks(repo_path, config_files))
+        
+        # Data and Analytics detection
+        frameworks.update(self._detect_data_frameworks(repo_path, config_files))
         
         return list(frameworks)
     
@@ -486,8 +467,88 @@ class RepositoryAnalyzer:
         return {
             'has_readme': has_readme
         }
+    def _detect_infrastructure_frameworks(self, repo_path: Path, config_files: List[str]) -> Set[str]:
+        """Detect Infrastructure as Code frameworks."""
+        frameworks = set()
+        
+        # Check for Terraform files
+        if any(repo_path.glob('**/*.tf')):
+            frameworks.add('Terraform')
+        
+        # Check for Helm
+        if (repo_path / 'Chart.yaml').exists() or any(repo_path.glob('**/Chart.yaml')):
+            frameworks.add('Helm')
+        
+        # Check for CloudFormation (YAML/JSON with AWS resources)
+        for cf_file in repo_path.glob('**/*.yaml'):
+            try:
+                with open(cf_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read(512)  # Read first 512 chars
+                    if 'AWSTemplateFormatVersion' in content or 'AWS::' in content:
+                        frameworks.add('CloudFormation')
+                        break
+            except (OSError, UnicodeDecodeError):
+                continue
+        
+        # Check for Ansible
+        for ansible_file in ['ansible.cfg', 'playbook.yml', 'playbook.yaml']:
+            if (repo_path / ansible_file).exists():
+                frameworks.add('Ansible')
+                break
+        
+        return frameworks
     
+    def _detect_cloud_frameworks(self, repo_path: Path, config_files: List[str]) -> Set[str]:
+        """Detect Cloud and Serverless frameworks."""
+        frameworks = set()
+        
+        # Check for Serverless Framework
+        if 'serverless.yml' in config_files or (repo_path / 'serverless.yml').exists():
+            frameworks.add('Serverless Framework')
+        
+        # Check for Azure Functions
+        if (repo_path / 'function.json').exists() or any(repo_path.glob('**/function.json')):
+            frameworks.add('Azure Functions')
+        
+        # Check for AWS Lambda (Python)
+        for lambda_file in repo_path.glob('**/lambda_function.py'):
+            frameworks.add('AWS Lambda')
+            break
+        
+        # Check for AWS Lambda (Node.js)
+        for handler_file in repo_path.glob('**/index.js'):
+            try:
+                with open(handler_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read(512)
+                    if 'exports.handler' in content or 'aws-lambda' in content:
+                        frameworks.add('AWS Lambda')
+                        break
+            except (OSError, UnicodeDecodeError):
+                continue
+        
+        return frameworks
     
-    
-    
-    
+    def _detect_data_frameworks(self, repo_path: Path, config_files: List[str]) -> Set[str]:
+        """Detect Data and Analytics frameworks."""
+        frameworks = set()
+        
+        # Check for Jupyter notebooks
+        if any(repo_path.glob('**/*.ipynb')):
+            frameworks.add('Jupyter')
+        
+        # Check for dbt
+        if (repo_path / 'dbt_project.yml').exists():
+            frameworks.add('dbt')
+        
+        # Check for Airflow DAGs
+        for dag_file in repo_path.glob('**/dags/**/*.py'):
+            try:
+                with open(dag_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read(512)
+                    if 'from airflow' in content or 'import airflow' in content:
+                        frameworks.add('Apache Airflow')
+                        break
+            except (OSError, UnicodeDecodeError):
+                continue
+        
+        return frameworks

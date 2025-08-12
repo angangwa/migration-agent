@@ -797,14 +797,13 @@ class DiscoveryMemoryPlugin:
         if repo_metadata.config_files:
             suggestions.append(f"Examine config files: {', '.join(repo_metadata.config_files[:3])}")
         
-        if repo_metadata.technology_stack.primary_languages:
-            primary_lang = repo_metadata.technology_stack.primary_languages[0][0]
-            if primary_lang == "Python":
-                suggestions.append("Look for main.py, app.py, or manage.py entry points")
-            elif primary_lang == "JavaScript":
-                suggestions.append("Check package.json and look for index.js or server.js")
-            elif primary_lang == "Java":
-                suggestions.append("Find Main.java or Application.java entry points")
+        # Suggest investigation based on file types
+        if '.py' in repo_metadata.file_counts:
+            suggestions.append("Look for main.py, app.py, or manage.py entry points")
+        elif '.js' in repo_metadata.file_counts:
+            suggestions.append("Check package.json and look for index.js or server.js")
+        elif '.java' in repo_metadata.file_counts:
+            suggestions.append("Find Main.java or Application.java entry points")
         
         if repo_metadata.repository_type.value == "unknown":
             suggestions.append("Explore directory structure to understand architecture")
@@ -822,24 +821,24 @@ class DiscoveryMemoryPlugin:
     
     def _get_component_tech_summary(self, repo_names: List[str]) -> Dict[str, Any]:
         """Get technology summary for component repositories."""
-        languages = {}
+        file_types = {}
         frameworks = set()
         
         for repo_name in repo_names:
             if repo_name in self.state.repositories:
                 repo = self.state.repositories[repo_name]
                 
-                # Count languages
-                for lang, _ in repo.technology_stack.primary_languages:
-                    languages[lang] = languages.get(lang, 0) + 1
+                # Count file types
+                for file_type, count in repo.file_counts.items():
+                    file_types[file_type] = file_types.get(file_type, 0) + count
                 
                 # Collect frameworks
                 frameworks.update(repo.technology_stack.frameworks)
         
         return {
-            'primary_languages': dict(sorted(languages.items(), key=lambda x: x[1], reverse=True)),
+            'primary_file_types': dict(sorted(file_types.items(), key=lambda x: x[1], reverse=True)),
             'frameworks': sorted(list(frameworks)),
-            'language_diversity': len(languages),
+            'file_type_diversity': len(file_types),
             'framework_count': len(frameworks)
         }
     

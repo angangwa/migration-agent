@@ -1,0 +1,475 @@
+{
+  "repositories": {
+    "frontend": {
+      "name": "frontend",
+      "path": "frontend",
+      "discovery_phase_status": "Insights added. Assigned to components: frontend-application.",
+      "last_analyzed": null,
+      "total_files": 5,
+      "file_counts": {
+        ".json": 2,
+        ".js": 1,
+        "": 1,
+        ".md": 1
+      },
+      "total_lines": 1251,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "JavaScript",
+            1.0
+          ]
+        ],
+        "frameworks": [
+          "Express.js"
+        ]
+      },
+      "repository_type": "documentation",
+      "has_readme": true,
+      "config_files": [
+        "package.json",
+        "Dockerfile"
+      ],
+      "insights": {
+        "purpose": "Node.js Express-based proxy server to enable gradual migration from Django backend to a new frontend",
+        "business_function": "Routes requests to either new frontend routes or proxies to legacy Django backend, and serves static assets",
+        "architecture": "Express.js app using http-proxy-middleware, defines frontend routes, serves assets from public directory, deployed via ECS Fargate",
+        "key_dependencies": [
+          "express",
+          "http-proxy-middleware"
+        ],
+        "migration_complexity": "low",
+        "notes": "Acts as adapter for frontend migration, minimal business logic"
+      },
+      "assigned_components": [
+        "frontend-application"
+      ]
+    },
+    "docs": {
+      "name": "docs",
+      "path": "docs",
+      "discovery_phase_status": "Insights added. Assigned to components: documentation.",
+      "last_analyzed": null,
+      "total_files": 7,
+      "file_counts": {
+        ".png": 1,
+        ".md": 6
+      },
+      "total_lines": 1745,
+      "technology_stack": {
+        "primary_languages": [],
+        "frameworks": []
+      },
+      "repository_type": "documentation",
+      "has_readme": false,
+      "config_files": [],
+      "insights": {
+        "purpose": "Central repository for architecture decision records (ADRs), ER diagrams, and system documentation",
+        "business_function": "Provides documentation and architectural guidance for the migration and ongoing development",
+        "architecture": "Markdown-based ADRs under architecture/decisions, ER diagram PNGs, and guides (lit-guide.md)",
+        "key_dependencies": [],
+        "migration_complexity": "low",
+        "notes": "No code; static documentation. Important for stakeholders and future reference."
+      },
+      "assigned_components": [
+        "documentation"
+      ]
+    },
+    "lambda": {
+      "name": "lambda",
+      "path": "lambda",
+      "discovery_phase_status": "Insights added. Assigned to components: pipeline-orchestration.",
+      "last_analyzed": null,
+      "total_files": 2,
+      "file_counts": {
+        ".py": 2
+      },
+      "total_lines": 253,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "Python",
+            1.0
+          ]
+        ],
+        "frameworks": []
+      },
+      "repository_type": "unknown",
+      "has_readme": false,
+      "config_files": [],
+      "insights": {
+        "purpose": "AWS Lambda functions for orchestration: one submits AWS Batch jobs from SQS messages, one sends Batch job status notifications to Slack",
+        "business_function": "Handles asynchronous job submission and notifications for consultation processing workflows",
+        "architecture": "Two distinct Python Lambdas: submit_batch_job processes SQS events & calls boto3.batch, slack_notifier processes Batch event messages and posts to Slack via webhook",
+        "key_dependencies": [
+          "boto3",
+          "urllib3",
+          "pytest (for testing)"
+        ],
+        "migration_complexity": "medium",
+        "notes": "Stateless functions, straightforward to containerize or migrate to another serverless platform"
+      },
+      "assigned_components": [
+        "pipeline-orchestration"
+      ]
+    },
+    "infrastructure": {
+      "name": "infrastructure",
+      "path": "infrastructure",
+      "discovery_phase_status": "Insights added. Assigned to components: infrastructure-services.",
+      "last_analyzed": null,
+      "total_files": 21,
+      "file_counts": {
+        ".tf": 18,
+        ".md": 1,
+        ".png": 1,
+        ".sh": 1
+      },
+      "total_lines": 4287,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "Shell",
+            1.0
+          ]
+        ],
+        "frameworks": []
+      },
+      "repository_type": "unknown",
+      "has_readme": true,
+      "config_files": [],
+      "insights": {
+        "purpose": "Infrastructure as Code repository defining AWS resources for the application stack",
+        "business_function": "Deploys and manages cloud infrastructure for consultation services (ECS, RDS, Batch, IAM, VPC, etc.)",
+        "architecture": "Terraform modules and scripts, includes Terraform configs (.tf), scripts for releases and environment variables, GitHub Actions integration",
+        "key_dependencies": [
+          "Terraform",
+          "AWS provider"
+        ],
+        "migration_complexity": "high",
+        "notes": "Critical for deployment and networking; significant Terraform state management complexity"
+      },
+      "assigned_components": [
+        "infrastructure-services"
+      ]
+    },
+    "migration_tests": {
+      "name": "migration_tests",
+      "path": "migration_tests",
+      "discovery_phase_status": "Insights added. Assigned to components: consultation-application.",
+      "last_analyzed": null,
+      "total_files": 3,
+      "file_counts": {
+        ".py": 3
+      },
+      "total_lines": 129,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "Python",
+            1.0
+          ]
+        ],
+        "frameworks": []
+      },
+      "repository_type": "unknown",
+      "has_readme": false,
+      "config_files": [],
+      "insights": {
+        "purpose": "Collection of pytest scripts validating Django database migrations",
+        "business_function": "Ensures database schema changes apply correctly for the consultation application",
+        "architecture": "Simple Python pytest files testing specific migration steps using pytest and Django's migration framework",
+        "key_dependencies": [
+          "pytest",
+          "pytest-django",
+          "Django"
+        ],
+        "migration_complexity": "low",
+        "notes": "Supports safe evolution of database schema; can be integrated into CI pipeline"
+      },
+      "assigned_components": [
+        "consultation-application"
+      ]
+    },
+    "pipeline-mapping": {
+      "name": "pipeline-mapping",
+      "path": "pipeline-mapping",
+      "discovery_phase_status": "Insights added. Assigned to components: pipeline-orchestration.",
+      "last_analyzed": null,
+      "total_files": 3,
+      "file_counts": {
+        "": 1,
+        ".py": 1,
+        ".txt": 1
+      },
+      "total_lines": 212,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "Python",
+            1.0
+          ]
+        ],
+        "frameworks": []
+      },
+      "repository_type": "documentation",
+      "has_readme": false,
+      "config_files": [
+        "requirements.txt",
+        "Dockerfile"
+      ],
+      "insights": {
+        "purpose": "Script to orchestrate theme mapping pipeline: downloads consultation data from S3, invokes LLM-based analysis, and uploads mapping results back to S3",
+        "business_function": "Automates the execution of theme mapping workflows for consultations",
+        "architecture": "Python CLI using boto3 for S3 operations, pandas for data processing, AzureChatOpenAI for LLM calls, and themefinder library; async processing of consultations",
+        "key_dependencies": [
+          "boto3",
+          "pandas",
+          "langchain_openai",
+          "themefinder",
+          "asyncio"
+        ],
+        "migration_complexity": "medium",
+        "notes": "Handles bulk processing via CLI arguments; scalable but tightly coupled to S3 and LLM service"
+      },
+      "assigned_components": [
+        "pipeline-orchestration"
+      ]
+    },
+    "pipeline-sign-off": {
+      "name": "pipeline-sign-off",
+      "path": "pipeline-sign-off",
+      "discovery_phase_status": "Insights added. Assigned to components: pipeline-orchestration.",
+      "last_analyzed": null,
+      "total_files": 3,
+      "file_counts": {
+        ".py": 1,
+        "": 1,
+        ".txt": 1
+      },
+      "total_lines": 367,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "Python",
+            1.0
+          ]
+        ],
+        "frameworks": []
+      },
+      "repository_type": "documentation",
+      "has_readme": false,
+      "config_files": [
+        "requirements.txt",
+        "Dockerfile"
+      ],
+      "insights": {
+        "purpose": "CLI script to run the sign-off pipeline: downloads consultation data, performs LLM-based theme condensation, generation, mapping, refinement, and uploads results",
+        "business_function": "Automates end-to-end sign-off workflows for consultations using themefinder",
+        "architecture": "Python CLI using boto3 for S3 ops, pandas for data frames, AzureChatOpenAI for LLM, themefinder library; includes Dockerfile and requirements.txt for dependencies",
+        "key_dependencies": [
+          "boto3",
+          "pandas",
+          "langchain_openai",
+          "themefinder",
+          "xlsxwriter"
+        ],
+        "migration_complexity": "medium",
+        "notes": "Provides specialized pipeline for final sign-off analysis separate from mapping pipeline"
+      },
+      "assigned_components": [
+        "pipeline-orchestration"
+      ]
+    },
+    "legacy-frontend": {
+      "name": "legacy-frontend",
+      "path": "legacy-frontend",
+      "discovery_phase_status": "Insights added. Assigned to components: frontend-application.",
+      "last_analyzed": null,
+      "total_files": 43,
+      "file_counts": {
+        ".scss": 2,
+        ".json": 1,
+        ".ttf": 9,
+        ".map": 4,
+        ".js": 11,
+        ".css": 2,
+        ".svg": 14
+      },
+      "total_lines": 27093,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "JavaScript",
+            1.0
+          ]
+        ],
+        "frameworks": []
+      },
+      "repository_type": "unknown",
+      "has_readme": false,
+      "config_files": [],
+      "insights": {
+        "purpose": "Static legacy frontend assets and UI components for the consultation application",
+        "business_function": "Provides the client-side web UI for consultations, including styles, icons, and JavaScript behaviors",
+        "architecture": "Static assets organized in directories (icons, fonts, govuk-js), compiled Lit components in 'lit', SCSS stylesheets, served by Django/gunicorn",
+        "key_dependencies": [
+          "Lit",
+          "SCSS",
+          "GovUK Frontend"
+        ],
+        "migration_complexity": "medium",
+        "notes": "Large static asset repository (~27k lines); requires integration with new proxy server and asset pipeline"
+      },
+      "assigned_components": [
+        "frontend-application"
+      ]
+    },
+    "tests": {
+      "name": "tests",
+      "path": "tests",
+      "discovery_phase_status": "Insights added. Assigned to components: consultation-application.",
+      "last_analyzed": null,
+      "total_files": 52,
+      "file_counts": {
+        ".py": 51,
+        ".yml": 1
+      },
+      "total_lines": 4554,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "Python",
+            1.0
+          ]
+        ],
+        "frameworks": []
+      },
+      "repository_type": "unknown",
+      "has_readme": false,
+      "config_files": [],
+      "insights": {
+        "purpose": "Comprehensive Python test suite for the consultation application",
+        "business_function": "Validates functionality of core application modules, including unit, integration, and migration tests",
+        "architecture": "Pytest-based tests organized into commands, unit, integration, request, views, and examples; uses moto for AWS mocking and Django test fixtures",
+        "key_dependencies": [
+          "pytest",
+          "pytest-django",
+          "moto",
+          "boto3"
+        ],
+        "migration_complexity": "low",
+        "notes": "Essential for ensuring application reliability; closely tied to consultation_analyser codebase"
+      },
+      "assigned_components": [
+        "consultation-application"
+      ]
+    },
+    "consultation_analyser": {
+      "name": "consultation_analyser",
+      "path": "consultation_analyser",
+      "discovery_phase_status": "Insights added. Assigned to components: consultation-application.",
+      "last_analyzed": null,
+      "total_files": 287,
+      "file_counts": {
+        ".py": 129,
+        ".html": 38,
+        ".md": 1,
+        ".js": 48,
+        ".mjs": 64,
+        ".json": 7
+      },
+      "total_lines": 20273,
+      "technology_stack": {
+        "primary_languages": [
+          [
+            "Python",
+            0.7288135593220338
+          ],
+          [
+            "JavaScript",
+            0.2711864406779661
+          ]
+        ],
+        "frameworks": []
+      },
+      "repository_type": "unknown",
+      "has_readme": false,
+      "config_files": [],
+      "insights": {
+        "purpose": "Core Django-based monolithic application handling consultation workflows, user authentication, email notifications, and UI rendering",
+        "business_function": "Consultation management and analysis",
+        "architecture": "Monolithic Django project with multiple apps (authentication, consultations, email, support console), Jinja2 templates, Lit-based frontend components, PostgreSQL migrations",
+        "key_dependencies": [
+          "Django",
+          "Jinja2",
+          "Lit",
+          "Gunicorn"
+        ],
+        "migration_complexity": "high",
+        "notes": "No top-level manage.py; custom gunicorn and ASGI/WGSI setup, large codebase (~20273 lines) with extensive database migrations"
+      },
+      "assigned_components": [
+        "consultation-application"
+      ]
+    }
+  },
+  "components": {
+    "consultation-application": {
+      "name": "consultation-application",
+      "purpose": "Core consultation management system including business logic and tests",
+      "rationale": "Groups the main Django-based consultation_analyser application, its test suite, and migration tests which together form the core business functionality",
+      "repositories": [
+        "consultation_analyser",
+        "tests",
+        "migration_tests"
+      ],
+      "created_at": "2025-08-13T00:24:12.047580"
+    },
+    "frontend-application": {
+      "name": "frontend-application",
+      "purpose": "UI layer including legacy static assets and the new proxy server",
+      "rationale": "Groups the legacy frontend assets (SCSS, JS, icons) and the Express.js proxy that facilitates gradual migration",
+      "repositories": [
+        "legacy-frontend",
+        "frontend"
+      ],
+      "created_at": "2025-08-13T00:25:41.575037"
+    },
+    "pipeline-orchestration": {
+      "name": "pipeline-orchestration",
+      "purpose": "Orchestration services and scripts for consultation processing pipelines",
+      "rationale": "Groups AWS Lambda functions and CLI scripts that coordinate data download, analysis, and result uploads for mapping and sign-off workflows",
+      "repositories": [
+        "lambda",
+        "pipeline-mapping",
+        "pipeline-sign-off"
+      ],
+      "created_at": "2025-08-13T00:26:02.096194"
+    },
+    "infrastructure-services": {
+      "name": "infrastructure-services",
+      "purpose": "Infrastructure provisioning and deployment configurations",
+      "rationale": "Groups Terraform code and related docs essential for deploying and managing cloud infrastructure",
+      "repositories": [
+        "infrastructure"
+      ],
+      "created_at": "2025-08-13T00:26:06.294256"
+    },
+    "documentation": {
+      "name": "documentation",
+      "purpose": "System and architectural documentation and decision records",
+      "rationale": "Groups documentation files, ADRs, and architecture diagrams to support stakeholders and migration planning",
+      "repositories": [
+        "docs"
+      ],
+      "created_at": "2025-08-13T00:26:31.531946"
+    }
+  },
+  "total_repositories": 10,
+  "repositories_with_insights": 10,
+  "analysis_started": "2025-08-13T00:13:10.602844",
+  "analysis_completed": "2025-08-13T00:13:10.856087",
+  "last_updated": "2025-08-13T00:26:56.266187",
+  "base_repos_path": "/home/agangwal/lseg-migration-agent/migration-agent/consult copy/repos"
+}
