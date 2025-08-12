@@ -247,19 +247,41 @@ class ReportGenerator:
                 ])
                 
                 for repo_name, repo_data in sorted(repos):
-                    languages = ", ".join([f"{lang} ({conf:.1%})" for lang, conf in repo_data.technology_stack.primary_languages[:3]])
-                    frameworks = ", ".join(repo_data.technology_stack.frameworks[:3])
+                    # Build technical details only if we have actual data
+                    tech_details = []
+                    if repo_data.technology_stack.primary_languages:
+                        languages = ", ".join([f"{lang} ({conf:.1%})" for lang, conf in repo_data.technology_stack.primary_languages[:3]])
+                        tech_details.append(f"- Languages: {languages}")
+                    
+                    if repo_data.technology_stack.frameworks:
+                        frameworks = ", ".join(repo_data.technology_stack.frameworks[:3])
+                        tech_details.append(f"- Frameworks: {frameworks}")
+                    
+                    # Always show basic stats
+                    tech_details.extend([
+                        f"- Files: {repo_data.total_files:,}",
+                        f"- Lines: {repo_data.total_lines:,}"
+                    ])
+                    
+                    # Show discovery status and components
+                    tech_details.extend([
+                        f"- Status: {repo_data.discovery_phase_status}",
+                        f"- Components: {', '.join(repo_data.assigned_components) or 'Unassigned'}"
+                    ])
                     
                     report_lines.extend([
                         f"**{repo_name}**",
-                        f"- Type: {repo_data.repository_type.value}",
-                        f"- Languages: {languages or 'Unknown'}",
-                        f"- Frameworks: {frameworks or 'None detected'}",
-                        f"- Files: {repo_data.total_files:,}",
-                        f"- Lines: {repo_data.total_lines:,}",
-                        f"- Components: {', '.join(repo_data.assigned_components) or 'Unassigned'}",
-                        ""
+                        *tech_details
                     ])
+                    
+                    # Add insights if available
+                    if repo_data.insights:
+                        report_lines.append("- **Insights:**")
+                        for key, value in repo_data.insights.items():
+                            if key != 'analysis_error':  # Skip error entries
+                                report_lines.append(f"  - {key}: {value}")
+                    
+                    report_lines.append("")  # Empty line between repos
         
         # Logical Components Analysis
         if state.components:

@@ -96,16 +96,12 @@ class RepositoryAnalyzer:
             
             # Skip unused technology detection that is not exposed to LLM
             
-            # Set analysis confidence based on data completeness
-            metadata.analysis_confidence = self._calculate_confidence(metadata)
-            
             # Update discovery status
             metadata.update_discovery_status()
             
         except Exception as e:
             # On error, return partial metadata with error info
             metadata.insights['analysis_error'] = str(e)
-            metadata.analysis_confidence = 0.0
             
         return metadata
     
@@ -495,28 +491,3 @@ class RepositoryAnalyzer:
     
     
     
-    def _calculate_confidence(self, metadata: RepoMetadata) -> float:
-        """Calculate analysis confidence score."""
-        confidence_factors = []
-        
-        # Language detection confidence
-        if metadata.technology_stack.primary_languages:
-            confidence_factors.append(0.3)
-        
-        # Framework detection confidence
-        if metadata.technology_stack.frameworks:
-            confidence_factors.append(0.2)
-        
-        # Configuration files found
-        if metadata.config_files:
-            confidence_factors.append(0.2)
-        
-        # Repository type classified
-        if metadata.repository_type != RepositoryType.UNKNOWN:
-            confidence_factors.append(0.2)
-        
-        # Documentation present
-        if metadata.has_readme:
-            confidence_factors.append(0.1)
-        
-        return sum(confidence_factors)
