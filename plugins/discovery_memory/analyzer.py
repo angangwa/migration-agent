@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple, Optional, Set
 from collections import defaultdict, Counter
 
 from .models import (
-    RepoMetadata, TechnologyStack, RepositoryType,
+    RepoMetadata, TechnologyStack,
     CONFIG_PATTERNS, FRAMEWORK_PATTERNS
 )
 
@@ -80,11 +80,6 @@ class RepositoryAnalyzer:
             # Framework detection
             frameworks = self._detect_frameworks(repo_path, config_files)
             metadata.technology_stack.frameworks = frameworks
-            
-            # Repository type classification
-            metadata.repository_type = self._classify_repository_type(
-                repo_path, file_stats, config_files, frameworks
-            )
             
             # Documentation detection
             doc_info = self._analyze_documentation(repo_path)
@@ -403,50 +398,6 @@ class RepositoryAnalyzer:
             pass
             
         return frameworks
-    
-    def _classify_repository_type(
-        self, 
-        repo_path: Path, 
-        file_stats: Dict, 
-        config_files: List[str],
-        frameworks: List[str]
-    ) -> RepositoryType:
-        """Classify repository type based on analysis."""
-        
-        # Check for documentation-only repos
-        if (file_stats['total_files'] < 10 and 
-            any(ext in ['.md', '.rst', '.txt'] for ext in file_stats['file_counts'].keys())):
-            return RepositoryType.DOCUMENTATION
-        
-        # Check for configuration-only repos
-        config_extensions = {'.json', '.yaml', '.yml', '.toml', '.xml', '.ini', '.conf'}
-        if (file_stats['total_files'] < 50 and 
-            sum(file_stats['file_counts'].get(ext, 0) for ext in config_extensions) > 
-            file_stats['total_files'] * 0.7):
-            return RepositoryType.CONFIG
-        
-        # Check for library indicators
-        library_indicators = ['setup.py', 'package.json', 'pom.xml', 'Cargo.toml']
-        has_library_config = any(config in config_files for config in library_indicators)
-        
-        # Check for application entry points
-        entry_points = ['main.py', 'app.py', 'server.js', 'index.js', 'Main.java', 'main.go']
-        has_entry_point = any((repo_path / entry).exists() for entry in entry_points)
-        
-        # Check for microservice indicators
-        microservice_indicators = ['Dockerfile', 'kubernetes', 'k8s', 'helm']
-        has_microservice_config = any(config in config_files for config in microservice_indicators)
-        
-        if has_entry_point and has_microservice_config:
-            return RepositoryType.MICROSERVICE
-        elif has_entry_point and file_stats['total_lines'] > 10000:
-            return RepositoryType.MONOLITH
-        elif has_library_config and not has_entry_point:
-            return RepositoryType.LIBRARY
-        elif has_entry_point:
-            return RepositoryType.MICROSERVICE
-        else:
-            return RepositoryType.UNKNOWN
     
     def _analyze_documentation(self, repo_path: Path) -> Dict:
         """Analyze documentation files in the repository."""

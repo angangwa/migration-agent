@@ -13,7 +13,8 @@ from datetime import datetime
 from semantic_kernel.functions import kernel_function
 
 from .models import (
-    PluginResponse, RepoMetadata, ComponentData, AnalysisState
+    PluginResponse, RepoMetadata, ComponentData, AnalysisState, 
+    DependencyRecord, DeepAnalysis
 )
 from .analyzer import RepositoryAnalyzer
 from .storage import DiscoveryStorage
@@ -53,6 +54,9 @@ class DiscoveryMemoryPlugin:
         
         # Track if initial analysis has been performed
         self._initial_analysis_done = self.state.analysis_completed is not None
+        
+        # Initialize runtime dependency cache (not persisted)
+        self._dependency_cache = {}
 
     @kernel_function(
         name="get_all_repos",
@@ -689,6 +693,675 @@ class DiscoveryMemoryPlugin:
                 ]
             ).model_dump()
 
+    # === Phase 2 Kernel Functions ===
+
+    @kernel_function(
+        name="store_repository_deep_analysis",
+        description="""Store comprehensive Phase 2 deep analysis for a repository.
+        
+        Stores your detailed findings from deep dive analysis:
+        - markdown_summary (required): Well-formatted markdown report
+        - deep_insights (optional): Custom key-value insights
+        
+        For dependencies, use the dedicated add_repository_dependency() function.
+        Validates that repo_name exists in the system.
+        
+        Parameters:
+        - repo_name: Name of the repository (must exist)
+        - markdown_summary: Comprehensive markdown report
+        - deep_insights: Custom key-value pairs for additional insights
+        
+        Example:
+        store_repository_deep_analysis(
+            repo_name="customer-api",
+            markdown_summary="# Customer API Analysis\\n## Overview\\n...",
+            deep_insights={
+                "api_style": "RESTful with OpenAPI 3.0",
+                "database": "PostgreSQL with Prisma ORM",
+                "deployment": "Kubernetes with Helm charts",
+                "test_coverage": "85%",
+                "migration_effort_days": 15
+            }
+        )""",
+    )
+    async def store_repository_deep_analysis(
+        self,
+        repo_name: Annotated[str, "Repository name"],
+        markdown_summary: Annotated[str, "Comprehensive markdown analysis report"],
+        deep_insights: Annotated[Dict[str, Any], "Custom key-value insights"] = None
+    ) -> Dict[str, Any]:
+        """Store comprehensive Phase 2 analysis with validation."""
+        
+        try:
+            # Validate repo exists
+            if repo_name not in self.state.repositories:
+                return PluginResponse(
+                    success=False,
+                    error=f"Repository '{repo_name}' not found. Use get_all_repos() to see valid repositories.",
+                    suggestions=[
+                        "Check repository name spelling",
+                        "Run get_all_repos() to see available repositories",
+                        "Ensure repository has been discovered in Phase 1"
+                    ]
+                ).model_dump()
+            
+            # Create deep analysis object
+            if deep_insights is None:
+                deep_insights = {}
+            
+            deep_analysis = DeepAnalysis(
+                markdown_summary=markdown_summary,
+                deep_insights=deep_insights,
+                analysis_timestamp=datetime.now()
+            )
+            
+            # Store in repository metadata
+            repo = self.state.repositories[repo_name]
+            repo.deep_analysis = deep_analysis
+            
+            # Save state
+            self.storage.save_state(self.state)
+            
+            return PluginResponse(
+                success=True,
+                data={
+                    "repository": repo_name,
+                    "markdown_length": len(markdown_summary),
+                    "insights_count": len(deep_insights),
+                    "analysis_timestamp": deep_analysis.analysis_timestamp.isoformat()
+                },
+                suggestions=[
+                    "Deep analysis stored successfully",
+                    "Use add_repository_dependency() to track dependencies to other repositories",
+                    "Use get_repository_details() to see complete repository information"
+                ],
+                metadata={
+                    "phase": "2",
+                    "operation": "store_deep_analysis",
+                    "has_previous_analysis": repo.deep_analysis is not None
+                }
+            ).model_dump()
+            
+        except Exception as e:
+            return PluginResponse(
+                success=False,
+                error=f"Failed to store deep analysis: {str(e)}",
+                suggestions=[
+                    "Ensure markdown_summary is a valid string",
+                    "Check deep_insights is a valid dictionary",
+                    "Verify repository name exists"
+                ]
+            ).model_dump()
+
+    @kernel_function(
+        name="add_repository_dependency",
+        description="""Add a specific dependency between repositories.
+        
+        Documents a discovered dependency with validation that both repos exist.
+        Updates both source (outgoing) and target (incoming) dependency lists.
+        
+        Parameters:
+        - source_repo: Repository that has the dependency (must exist)
+        - target_repo: Repository being depended upon (must exist)  
+        - dependency_type: Descriptive type (e.g. code/api/database/config/build/runtime or custom)
+        - description: Clear description of the dependency
+        - evidence: List of file paths or code snippets as proof
+        
+        Example:
+        add_repository_dependency(
+            source_repo="frontend-app",
+            target_repo="customer-api",
+            dependency_type="api",
+            description="Calls customer endpoints for user profile data",
+            evidence=["src/services/customer.js:45-67"]
+        )""",
+    )
+    async def add_repository_dependency(
+        self,
+        source_repo: Annotated[str, "Repository with the dependency"],
+        target_repo: Annotated[str, "Repository being depended upon"],
+        dependency_type: Annotated[str, "Descriptive dependency type (flexible, e.g. api, database, shared-library)"],
+        description: Annotated[str, "Clear description of the dependency"],
+        evidence: Annotated[List[str], "File paths or code snippets as evidence"] = None
+    ) -> Dict[str, Any]:
+        """Add dependency with bidirectional updates and validation."""
+        
+        try:
+            # Validate both repos exist
+            if source_repo not in self.state.repositories:
+                return PluginResponse(
+                    success=False,
+                    error=f"Source repository '{source_repo}' not found.",
+                    suggestions=[
+                        "Check source repository name spelling",
+                        "Run get_all_repos() to see available repositories"
+                    ]
+                ).model_dump()
+            
+            if target_repo not in self.state.repositories:
+                return PluginResponse(
+                    success=False,
+                    error=f"Target repository '{target_repo}' not found.",
+                    suggestions=[
+                        "Check target repository name spelling", 
+                        "Run get_all_repos() to see available repositories"
+                    ]
+                ).model_dump()
+            
+            # Validate dependency type (flexible validation - allow any non-empty string)
+            if not dependency_type or not isinstance(dependency_type, str):
+                return PluginResponse(
+                    success=False,
+                    error="Dependency type must be a non-empty string",
+                    suggestions=[
+                        "Common dependency types: code, api, database, config, build, runtime",
+                        "Use descriptive types that help understand the relationship",
+                        "Examples: 'shared-library', 'message-queue', 'authentication-service'"
+                    ]
+                ).model_dump()
+            
+            # Clean up the dependency type
+            dependency_type = dependency_type.strip().lower()
+            
+            if evidence is None:
+                evidence = []
+            
+            # Check for duplicate dependency
+            for existing in self.state.dependency_records:
+                if (existing.source_repo == source_repo and 
+                    existing.target_repo == target_repo and 
+                    existing.dependency_type == dependency_type):
+                    return PluginResponse(
+                        success=False,
+                        error=f"Dependency already exists: {source_repo} -> {target_repo} ({dependency_type})",
+                        suggestions=[
+                            "Dependency is already recorded",
+                            "Use get_dependency_graph() to see all dependencies",
+                            "Consider updating the existing dependency if needed"
+                        ]
+                    ).model_dump()
+            
+            # Create dependency record
+            dependency = DependencyRecord(
+                source_repo=source_repo,
+                target_repo=target_repo,
+                dependency_type=dependency_type,
+                description=description,
+                evidence=evidence,
+                created_at=datetime.now()
+            )
+            
+            # Add to dependency records
+            self.state.dependency_records.append(dependency)
+            
+            # Clear cache to force rebuild
+            self._clear_dependency_cache()
+            
+            # Save state
+            self.storage.save_state(self.state)
+            
+            return PluginResponse(
+                success=True,
+                data={
+                    "source_repo": source_repo,
+                    "target_repo": target_repo,
+                    "dependency_type": dependency_type,
+                    "evidence_count": len(evidence),
+                    "created_at": dependency.created_at.isoformat()
+                },
+                suggestions=[
+                    f"Dependency recorded: {source_repo} -> {target_repo}",
+                    "Use get_dependency_graph() to visualize all dependencies",
+                    "Use get_repository_details() to see repository dependencies"
+                ],
+                metadata={
+                    "phase": "2",
+                    "operation": "add_dependency",
+                    "total_dependencies": len(self.state.dependency_records)
+                }
+            ).model_dump()
+            
+        except Exception as e:
+            return PluginResponse(
+                success=False,
+                error=f"Failed to add dependency: {str(e)}",
+                suggestions=[
+                    "Verify both repository names exist",
+                    "Check dependency type is valid",
+                    "Ensure description is provided"
+                ]
+            ).model_dump()
+
+    @kernel_function(
+        name="get_repository_details",
+        description="""Get complete repository details from both Phase 1 and Phase 2.
+        
+        Unified function that returns:
+        - Basic metadata (Phase 1): file counts, frameworks, lines of code
+        - Insights (Phase 1): Purpose, business function, architecture notes
+        - Deep analysis (Phase 2): Markdown summary, dependencies, deep insights
+        - Component assignments
+        
+        Works for repositories at any stage of analysis.
+        
+        Parameters:
+        - repo_name: Repository to retrieve details for
+        - include_dependencies: Include dependency analysis (default: True)
+        
+        Returns all available data for the repository.""",
+    )
+    async def get_repository_details(
+        self,
+        repo_name: Annotated[str, "Repository name"],
+        include_dependencies: Annotated[bool, "Include dependency analysis"] = True
+    ) -> Dict[str, Any]:
+        """Get unified repository details from all phases."""
+        
+        try:
+            if repo_name not in self.state.repositories:
+                return PluginResponse(
+                    success=False,
+                    error=f"Repository '{repo_name}' not found.",
+                    suggestions=[
+                        "Check repository name spelling",
+                        "Run get_all_repos() to see available repositories"
+                    ]
+                ).model_dump()
+            
+            repo = self.state.repositories[repo_name]
+            
+            # Build comprehensive details
+            details = {
+                # Phase 1 basic metadata
+                "name": repo.name,
+                "path": repo.path,
+                "file_extensions": self._format_file_extensions(repo.file_counts),
+                "frameworks": repo.technology_stack.frameworks,
+                "total_files": repo.total_files,
+                "total_lines": repo.total_lines,
+                "has_readme": repo.has_readme,
+                "config_files": repo.config_files,
+                
+                # Phase 1 insights
+                "insights": repo.insights,
+                "assigned_components": repo.assigned_components,
+                "discovery_status": repo.discovery_phase_status,
+                
+                # Phase 2 deep analysis (if available)
+                "has_deep_analysis": repo.deep_analysis is not None,
+                "markdown_summary": repo.deep_analysis.markdown_summary if repo.deep_analysis else None,
+                "deep_insights": repo.deep_analysis.deep_insights if repo.deep_analysis else {},
+                "analysis_timestamp": (
+                    repo.deep_analysis.analysis_timestamp.isoformat() 
+                    if repo.deep_analysis else None
+                ),
+                
+                # Dependencies (computed from centralized records)
+                "dependencies": None
+            }
+            
+            if include_dependencies:
+                outgoing = self._get_outgoing_dependencies(repo_name)
+                incoming = self._get_incoming_dependencies(repo_name)
+                
+                details["dependencies"] = {
+                    "outgoing": outgoing,
+                    "incoming": incoming,
+                    "outgoing_count": len(outgoing),
+                    "incoming_count": len(incoming)
+                }
+            
+            return PluginResponse(
+                success=True,
+                data=details,
+                suggestions=[
+                    "Repository details retrieved successfully",
+                    "Use store_repository_deep_analysis() to add Phase 2 analysis" if not repo.deep_analysis else "Deep analysis available",
+                    "Use add_repository_dependency() to add dependency relationships"
+                ],
+                metadata={
+                    "phase_1_complete": bool(repo.insights),
+                    "phase_2_complete": repo.deep_analysis is not None,
+                    "has_components": bool(repo.assigned_components),
+                    "dependency_relationships": (
+                        len(outgoing) + len(incoming) 
+                        if include_dependencies else "not_requested"
+                    )
+                }
+            ).model_dump()
+            
+        except Exception as e:
+            return PluginResponse(
+                success=False,
+                error=f"Failed to get repository details: {str(e)}",
+                suggestions=[
+                    "Verify repository name exists",
+                    "Check if repository has been analyzed"
+                ]
+            ).model_dump()
+
+    @kernel_function(
+        name="get_dependency_graph",
+        description="""Generate dependency graph for all repositories.
+        
+        Returns structured dependency data optimized for both AI agents and humans:
+        
+        For AI Agents:
+        - Structured dict with source->target mappings
+        - Dependency types and descriptions
+        - Easy to traverse programmatically
+        
+        For Humans:
+        - Summary statistics (total dependencies, most connected repos)
+        - Circular dependency detection
+        - Orphaned repositories (no dependencies)
+        - Optional Mermaid diagram for visualization
+        
+        Parameters:
+        - format: "structured" (default), "mermaid", or "both"
+        - include_evidence: Include evidence file paths (default: False)
+        
+        Returns dependency graph in requested format.""",
+    )
+    async def get_dependency_graph(
+        self,
+        format: Annotated[str, "Output format: structured/mermaid/both"] = "structured",
+        include_evidence: Annotated[bool, "Include evidence paths"] = False
+    ) -> Dict[str, Any]:
+        """Generate dependency graph for analysis and visualization."""
+        
+        try:
+            # Validate format
+            valid_formats = ["structured", "mermaid", "both"]
+            if format not in valid_formats:
+                return PluginResponse(
+                    success=False,
+                    error=f"Invalid format '{format}'. Must be one of: {valid_formats}",
+                    suggestions=[
+                        "Use 'structured' for programmatic access",
+                        "Use 'mermaid' for visualization",
+                        "Use 'both' for complete output"
+                    ]
+                ).model_dump()
+            
+            # Build dependency graph
+            graph = {
+                "nodes": [],  # List of all repos with dependencies
+                "edges": [],  # List of all dependencies
+                "statistics": {},
+                "issues": {}
+            }
+            
+            # Collect all dependencies from centralized records
+            repos_with_deps = set()
+            for dep_record in self.state.dependency_records:
+                repos_with_deps.add(dep_record.source_repo)
+                repos_with_deps.add(dep_record.target_repo)
+                
+                edge = {
+                    "source": dep_record.source_repo,
+                    "target": dep_record.target_repo,
+                    "type": dep_record.dependency_type,
+                    "description": dep_record.description
+                }
+                
+                # Add evidence if requested
+                if include_evidence and dep_record.evidence:
+                    edge["evidence"] = dep_record.evidence
+                
+                graph["edges"].append(edge)
+            
+            graph["nodes"] = list(repos_with_deps)
+            
+            # Calculate statistics
+            graph["statistics"] = {
+                "total_repositories": len(self.state.repositories),
+                "repositories_with_dependencies": len(repos_with_deps),
+                "total_dependencies": len(graph["edges"]),
+                "most_depended_upon": self._find_most_depended_upon(),
+                "most_dependent": self._find_most_dependent(),
+                "average_dependencies": (
+                    len(graph["edges"]) / len(repos_with_deps) 
+                    if repos_with_deps else 0
+                )
+            }
+            
+            # Detect issues
+            graph["issues"] = {
+                "circular_dependencies": self._detect_circular_dependencies(),
+                "orphaned_repositories": self._find_orphaned_repos()
+            }
+            
+            # Generate Mermaid if requested
+            if format in ["mermaid", "both"]:
+                mermaid = self._generate_mermaid_diagram(graph)
+                if format == "mermaid":
+                    return PluginResponse(
+                        success=True,
+                        data={
+                            "mermaid": mermaid, 
+                            "statistics": graph["statistics"],
+                            "issues": graph["issues"]
+                        },
+                        suggestions=[
+                            "Use Mermaid diagram for visualization",
+                            "Copy diagram to markdown files or documentation"
+                        ]
+                    ).model_dump()
+                else:
+                    graph["mermaid"] = mermaid
+            
+            return PluginResponse(
+                success=True,
+                data=graph,
+                suggestions=[
+                    "Use 'edges' for programmatic dependency traversal",
+                    "Review 'issues' section for potential problems",
+                    "Check 'statistics' for dependency insights",
+                    "Use format='mermaid' for visualization diagrams"
+                ],
+                metadata={
+                    "format": format,
+                    "includes_evidence": include_evidence,
+                    "dependency_count": len(graph["edges"]),
+                    "repo_coverage": len(repos_with_deps) / len(self.state.repositories) if self.state.repositories else 0
+                }
+            ).model_dump()
+            
+        except Exception as e:
+            return PluginResponse(
+                success=False,
+                error=f"Failed to generate dependency graph: {str(e)}",
+                suggestions=[
+                    "Ensure dependencies have been added with add_repository_dependency()",
+                    "Check format parameter is valid"
+                ]
+            ).model_dump()
+
+    @kernel_function(
+        name="generate_deep_analysis_report",
+        description="""Generate formatted markdown report from Phase 2 analysis data.
+        
+        Creates a comprehensive human-readable report from structured memory data.
+        Designed for stakeholders and migration teams, not for AI consumption.
+        
+        Report includes:
+        - Executive summary with key metrics
+        - Repository-by-repository deep analysis
+        - Dependency visualization and analysis
+        - Technology stack breakdown
+        - Component organization
+        - Migration considerations from AI insights
+        
+        Parameters:
+        - include_phase1: Include Phase 1 basic analysis (default: True)
+        - include_dependencies: Include dependency section (default: True)
+        - repo_filter: List of specific repos to include (None for all)
+        
+        Returns markdown-formatted report ready for documentation.""",
+    )
+    async def generate_deep_analysis_report(
+        self,
+        include_phase1: Annotated[bool, "Include Phase 1 analysis"] = True,
+        include_dependencies: Annotated[bool, "Include dependency analysis"] = True,
+        repo_filter: Annotated[List[str], "Filter to specific repositories"] = None
+    ) -> Dict[str, Any]:
+        """Generate human-readable markdown report from memory."""
+        
+        try:
+            # Validate repo filter
+            if repo_filter:
+                invalid = [r for r in repo_filter if r not in self.state.repositories]
+                if invalid:
+                    return PluginResponse(
+                        success=False,
+                        error=f"Invalid repositories in filter: {invalid}",
+                        suggestions=[
+                            "Check repository names in filter",
+                            "Run get_all_repos() to see available repositories"
+                        ]
+                    ).model_dump()
+            
+            # Build report sections
+            report_lines = []
+            
+            # Header
+            report_lines.append("# Deep Repository Analysis Report")
+            report_lines.append(f"\n**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            report_lines.append(f"**Total Repositories:** {len(self.state.repositories)}")
+            
+            # Executive Summary
+            phase2_count = sum(1 for r in self.state.repositories.values() if r.deep_analysis)
+            dep_count = len(self.state.dependency_records)
+            
+            report_lines.append("\n## Executive Summary")
+            report_lines.append(f"- Repositories with deep analysis: {phase2_count}/{len(self.state.repositories)}")
+            report_lines.append(f"- Total dependency relationships: {dep_count}")
+            report_lines.append(f"- Analysis completion: {(phase2_count / len(self.state.repositories) * 100):.1f}%")
+            
+            # Repository Deep Dives
+            report_lines.append("\n## Repository Analysis")
+            
+            repos_to_include = repo_filter if repo_filter else sorted(self.state.repositories.keys())
+            
+            for repo_name in repos_to_include:
+                repo = self.state.repositories[repo_name]
+                
+                report_lines.append(f"\n### {repo_name}")
+                
+                if include_phase1:
+                    report_lines.append("\n**Basic Information:**")
+                    report_lines.append(f"- Path: `{repo.path}`")
+                    report_lines.append(f"- Files: {repo.total_files} ({repo.total_lines:,} lines)")
+                    if repo.file_counts:
+                        top_langs = list(repo.file_counts.keys())[:3]
+                        report_lines.append(f"- Primary languages: {', '.join(top_langs)}")
+                    if repo.technology_stack.frameworks:
+                        report_lines.append(f"- Frameworks: {', '.join(repo.technology_stack.frameworks)}")
+                
+                if repo.deep_analysis:
+                    report_lines.append("\n**Deep Analysis:**")
+                    report_lines.append(repo.deep_analysis.markdown_summary)
+                    
+                    if repo.deep_analysis.deep_insights:
+                        report_lines.append("\n**Key Insights:**")
+                        for key, value in repo.deep_analysis.deep_insights.items():
+                            report_lines.append(f"- **{key}**: {value}")
+                else:
+                    report_lines.append("\n*No deep analysis available*")
+                
+                if include_dependencies:
+                    outgoing = self._get_outgoing_dependencies(repo_name)
+                    incoming = self._get_incoming_dependencies(repo_name)
+                    
+                    if outgoing or incoming:
+                        report_lines.append("\n**Dependencies:**")
+                        
+                        if outgoing:
+                            report_lines.append("\n*Depends on:*")
+                            for dep in outgoing:
+                                report_lines.append(f"- → `{dep['target_repo']}` ({dep['dependency_type']}): {dep['description']}")
+                        
+                        if incoming:
+                            report_lines.append("\n*Depended upon by:*")
+                            for dep in incoming:
+                                report_lines.append(f"- ← `{dep['source_repo']}` ({dep['dependency_type']}): {dep['description']}")
+            
+            # Dependency Graph Section
+            if include_dependencies and self.state.dependency_records:
+                report_lines.append("\n## Dependency Analysis")
+                
+                # Get dependency statistics
+                dep_graph_result = await self.get_dependency_graph(format="both")
+                if dep_graph_result["success"]:
+                    dep_data = dep_graph_result["data"]
+                    stats = dep_data["statistics"]
+                    
+                    report_lines.append(f"- Total dependencies: {stats['total_dependencies']}")
+                    report_lines.append(f"- Repositories with dependencies: {stats['repositories_with_dependencies']}")
+                    
+                    if stats.get('most_depended_upon'):
+                        report_lines.append(f"- Most depended upon: `{stats['most_depended_upon']}`")
+                    if stats.get('most_dependent'):
+                        report_lines.append(f"- Most dependent: `{stats['most_dependent']}`")
+                    
+                    # Issues
+                    if dep_data["issues"]["circular_dependencies"]:
+                        report_lines.append(f"\n**⚠️ Circular Dependencies Detected:**")
+                        for cycle in dep_data["issues"]["circular_dependencies"]:
+                            report_lines.append(f"- {' ↔ '.join(cycle)}")
+                    
+                    if dep_data["issues"]["orphaned_repositories"]:
+                        report_lines.append(f"\n**Isolated Repositories:**")
+                        for orphan in dep_data["issues"]["orphaned_repositories"]:
+                            report_lines.append(f"- `{orphan}` (no dependencies)")
+                    
+                    # Mermaid diagram
+                    if dep_data.get("mermaid"):
+                        report_lines.append("\n### Dependency Diagram")
+                        report_lines.append("\n```mermaid")
+                        report_lines.append(dep_data["mermaid"])
+                        report_lines.append("```")
+            
+            # Join and return
+            report_content = "\n".join(report_lines)
+            
+            return PluginResponse(
+                success=True,
+                data={
+                    "report": report_content,
+                    "statistics": {
+                        "repositories_included": len(repos_to_include),
+                        "deep_analyses_included": phase2_count,
+                        "dependencies_included": dep_count,
+                        "report_length": len(report_content),
+                        "word_count": len(report_content.split())
+                    }
+                },
+                suggestions=[
+                    "Report generated successfully",
+                    "Save report to markdown file for documentation",
+                    "Share with migration planning teams"
+                ],
+                metadata={
+                    "includes_phase1": include_phase1,
+                    "includes_dependencies": include_dependencies,
+                    "filtered_repos": repo_filter is not None,
+                    "completion_percentage": (phase2_count / len(self.state.repositories) * 100) if self.state.repositories else 0
+                }
+            ).model_dump()
+            
+        except Exception as e:
+            return PluginResponse(
+                success=False,
+                error=f"Failed to generate deep analysis report: {str(e)}",
+                suggestions=[
+                    "Ensure repositories have deep analysis data",
+                    "Check repo_filter contains valid repository names",
+                    "Verify dependencies have been added"
+                ]
+            ).model_dump()
+
     async def _perform_initial_analysis(self) -> Dict[str, Any]:
         """Perform initial automated analysis of all repositories."""
         
@@ -894,3 +1567,138 @@ class DiscoveryMemoryPlugin:
             top_10['others'] = others_count
         
         return top_10
+    
+    # === Phase 2 Helper Methods ===
+    
+    def _get_outgoing_dependencies(self, repo_name: str) -> List[Dict[str, Any]]:
+        """Get outgoing dependencies for a repository with caching."""
+        if '_outgoing_cache' not in self._dependency_cache:
+            self._build_dependency_cache()
+        
+        return self._dependency_cache['_outgoing_cache'].get(repo_name, [])
+
+    def _get_incoming_dependencies(self, repo_name: str) -> List[Dict[str, Any]]:
+        """Get incoming dependencies for a repository with caching."""
+        if '_incoming_cache' not in self._dependency_cache:
+            self._build_dependency_cache()
+        
+        return self._dependency_cache['_incoming_cache'].get(repo_name, [])
+
+    def _build_dependency_cache(self):
+        """Build outgoing and incoming dependency caches."""
+        outgoing = {}
+        incoming = {}
+        
+        for dep in self.state.dependency_records:
+            # Build outgoing cache
+            if dep.source_repo not in outgoing:
+                outgoing[dep.source_repo] = []
+            outgoing[dep.source_repo].append({
+                'target_repo': dep.target_repo,
+                'dependency_type': dep.dependency_type,
+                'description': dep.description,
+                'evidence': dep.evidence,
+                'created_at': dep.created_at.isoformat()
+            })
+            
+            # Build incoming cache
+            if dep.target_repo not in incoming:
+                incoming[dep.target_repo] = []
+            incoming[dep.target_repo].append({
+                'source_repo': dep.source_repo,
+                'dependency_type': dep.dependency_type,
+                'description': dep.description,
+                'evidence': dep.evidence,
+                'created_at': dep.created_at.isoformat()
+            })
+        
+        self._dependency_cache['_outgoing_cache'] = outgoing
+        self._dependency_cache['_incoming_cache'] = incoming
+
+    def _clear_dependency_cache(self):
+        """Clear dependency cache after updates."""
+        self._dependency_cache = {}
+
+    def _find_most_depended_upon(self) -> Optional[str]:
+        """Find repository with most incoming dependencies."""
+        if not self.state.dependency_records:
+            return None
+        
+        incoming_counts = {}
+        for dep in self.state.dependency_records:
+            incoming_counts[dep.target_repo] = incoming_counts.get(dep.target_repo, 0) + 1
+        
+        return max(incoming_counts.items(), key=lambda x: x[1])[0] if incoming_counts else None
+
+    def _find_most_dependent(self) -> Optional[str]:
+        """Find repository with most outgoing dependencies."""
+        if not self.state.dependency_records:
+            return None
+        
+        outgoing_counts = {}
+        for dep in self.state.dependency_records:
+            outgoing_counts[dep.source_repo] = outgoing_counts.get(dep.source_repo, 0) + 1
+        
+        return max(outgoing_counts.items(), key=lambda x: x[1])[0] if outgoing_counts else None
+
+    def _detect_circular_dependencies(self) -> List[List[str]]:
+        """Detect circular dependencies in the dependency graph."""
+        # Build adjacency list
+        graph = {}
+        for dep in self.state.dependency_records:
+            if dep.source_repo not in graph:
+                graph[dep.source_repo] = []
+            graph[dep.source_repo].append(dep.target_repo)
+        
+        # Simple cycle detection (could be enhanced for complex cycles)
+        cycles = []
+        
+        def has_path(start, end, path):
+            if start == end and len(path) > 1:
+                return True
+            if start in path:
+                return False
+            
+            path = path + [start]
+            for neighbor in graph.get(start, []):
+                if has_path(neighbor, end, path):
+                    return True
+            return False
+        
+        # Check for cycles
+        visited_pairs = set()
+        for source_repo in graph:
+            for target_repo in graph[source_repo]:
+                pair = (source_repo, target_repo)
+                reverse_pair = (target_repo, source_repo)
+                
+                if pair not in visited_pairs and reverse_pair not in visited_pairs:
+                    visited_pairs.add(pair)
+                    if has_path(target_repo, source_repo, []):
+                        cycles.append([source_repo, target_repo])
+        
+        return cycles
+
+    def _find_orphaned_repos(self) -> List[str]:
+        """Find repositories with no dependencies (incoming or outgoing)."""
+        repos_with_deps = set()
+        
+        for dep in self.state.dependency_records:
+            repos_with_deps.add(dep.source_repo)
+            repos_with_deps.add(dep.target_repo)
+        
+        all_repos = set(self.state.repositories.keys())
+        return list(all_repos - repos_with_deps)
+
+    def _generate_mermaid_diagram(self, graph: Dict[str, Any]) -> str:
+        """Generate Mermaid diagram for dependency visualization."""
+        lines = ["graph TD"]
+        
+        # Add nodes and edges
+        for edge in graph.get("edges", []):
+            source = edge["source"].replace("-", "_")
+            target = edge["target"].replace("-", "_")
+            dep_type = edge["type"]
+            lines.append(f'    {source} -->|{dep_type}| {target}')
+        
+        return "\n".join(lines)

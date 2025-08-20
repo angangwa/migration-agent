@@ -13,17 +13,6 @@ from enum import Enum
 
 
 
-class RepositoryType(str, Enum):
-    """Repository classification types."""
-    MICROSERVICE = "microservice"
-    LIBRARY = "library"
-    CONFIG = "config"
-    DOCUMENTATION = "documentation"
-    MONOLITH = "monolith"
-    TOOL = "tool"
-    UNKNOWN = "unknown"
-
-
 class PluginResponse(BaseModel):
     """Standard response format for all plugin functions."""
     success: bool = Field(description="Whether the operation succeeded")
@@ -45,6 +34,19 @@ class TechnologyStack(BaseModel):
     )
 
 
+class DeepAnalysis(BaseModel):
+    """Phase 2 comprehensive analysis data."""
+    markdown_summary: str = Field(description="Comprehensive markdown analysis report")
+    deep_insights: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Custom key-value insights for additional findings"
+    )
+    analysis_timestamp: datetime = Field(
+        default_factory=datetime.now,
+        description="When deep analysis was performed"
+    )
+
+
 class RepoMetadata(BaseModel):
     """Comprehensive repository metadata."""
     name: str = Field(description="Repository name")
@@ -55,11 +57,6 @@ class RepoMetadata(BaseModel):
         default="No insights added. Assigned to no components.",
         description="Natural language status of discovery progress"
     )
-    last_analyzed: Optional[datetime] = Field(
-        default=None,
-        description="Timestamp of last automated analysis"
-    )
-    
     # Basic statistics
     total_files: int = Field(default=0, description="Total number of files")
     file_counts: Dict[str, int] = Field(
@@ -72,12 +69,6 @@ class RepoMetadata(BaseModel):
     technology_stack: TechnologyStack = Field(
         default_factory=TechnologyStack,
         description="Detected technology stack"
-    )
-    
-    # Classification
-    repository_type: RepositoryType = Field(
-        default=RepositoryType.UNKNOWN,
-        description="Repository type classification"
     )
     
     # Documentation
@@ -99,6 +90,12 @@ class RepoMetadata(BaseModel):
     assigned_components: List[str] = Field(
         default_factory=list,
         description="Components this repository is assigned to"
+    )
+    
+    # Phase 2: Deep analysis (optional for backward compatibility)
+    deep_analysis: Optional[DeepAnalysis] = Field(
+        default=None,
+        description="Phase 2 comprehensive analysis data"
     )
     
     def update_discovery_status(self):
@@ -138,6 +135,22 @@ class ComponentData(BaseModel):
     )
 
 
+class DependencyRecord(BaseModel):
+    """Structured dependency information with evidence tracking."""
+    source_repo: str = Field(description="Repository that has the dependency")
+    target_repo: str = Field(description="Repository being depended upon")
+    dependency_type: str = Field(description="Descriptive dependency type (flexible, e.g. api, database, shared-library)")
+    description: str = Field(description="Clear description of the dependency")
+    evidence: List[str] = Field(
+        default_factory=list,
+        description="File paths or code snippets as evidence"
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        description="When dependency was recorded"
+    )
+
+
 class AnalysisState(BaseModel):
     """Overall analysis state and progress tracking."""
     
@@ -151,6 +164,12 @@ class AnalysisState(BaseModel):
     components: Dict[str, ComponentData] = Field(
         default_factory=dict,
         description="All components keyed by component name"
+    )
+    
+    # Phase 2: Centralized dependency tracking
+    dependency_records: List[DependencyRecord] = Field(
+        default_factory=list,
+        description="All dependencies between repositories"
     )
     
     # Progress tracking
@@ -173,6 +192,7 @@ class AnalysisState(BaseModel):
     
     # Settings
     base_repos_path: str = Field(description="Base path to repositories")
+    
     
     def get_progress_summary(self) -> Dict[str, Any]:
         """Get discovery progress summary."""

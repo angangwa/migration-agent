@@ -13,7 +13,7 @@ from datetime import datetime
 import threading
 from contextlib import contextmanager
 
-from .models import AnalysisState, RepoMetadata, ComponentData
+from .models import AnalysisState, RepoMetadata, ComponentData, DependencyRecord, DeepAnalysis
 
 
 class DiscoveryStorage:
@@ -234,9 +234,13 @@ class DiscoveryStorage:
         # Convert dictionaries back to model instances
         repositories = {}
         for repo_name, repo_data in data.get('repositories', {}).items():
-            # Handle datetime fields
-            if 'last_analyzed' in repo_data and repo_data['last_analyzed']:
-                repo_data['last_analyzed'] = datetime.fromisoformat(repo_data['last_analyzed'])
+            # Handle Phase 2 deep_analysis if present
+            if 'deep_analysis' in repo_data and repo_data['deep_analysis']:
+                deep_analysis_data = repo_data['deep_analysis']
+                if 'analysis_timestamp' in deep_analysis_data and deep_analysis_data['analysis_timestamp']:
+                    deep_analysis_data['analysis_timestamp'] = datetime.fromisoformat(deep_analysis_data['analysis_timestamp'])
+                repo_data['deep_analysis'] = DeepAnalysis(**deep_analysis_data)
+            
             repositories[repo_name] = RepoMetadata(**repo_data)
         
         components = {}
@@ -244,6 +248,13 @@ class DiscoveryStorage:
             if 'created_at' in comp_data and comp_data['created_at']:
                 comp_data['created_at'] = datetime.fromisoformat(comp_data['created_at'])
             components[comp_name] = ComponentData(**comp_data)
+        
+        # Handle Phase 2 dependency_records if present
+        dependency_records = []
+        for dep_data in data.get('dependency_records', []):
+            if 'created_at' in dep_data and dep_data['created_at']:
+                dep_data['created_at'] = datetime.fromisoformat(dep_data['created_at'])
+            dependency_records.append(DependencyRecord(**dep_data))
         
         # Handle timestamps in main state
         if 'analysis_started' in data and data['analysis_started']:
@@ -256,6 +267,7 @@ class DiscoveryStorage:
         # Reconstruct AnalysisState
         data['repositories'] = repositories
         data['components'] = components
+        data['dependency_records'] = dependency_records
         
         return AnalysisState(**data)
     
