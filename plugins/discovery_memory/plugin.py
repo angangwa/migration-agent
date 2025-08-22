@@ -696,41 +696,35 @@ class DiscoveryMemoryPlugin:
     # === Phase 2 Kernel Functions ===
 
     @kernel_function(
-        name="store_repository_deep_analysis",
-        description="""Store comprehensive Phase 2 deep analysis for a repository.
+        name="store_repository_deep_insights",
+        description="""Store or update deep insights progressively during Phase 2 analysis.
         
-        Stores your detailed findings from deep dive analysis:
-        - markdown_summary (required): Well-formatted markdown report
-        - deep_insights (optional): Custom key-value insights
-        
-        For dependencies, use the dedicated add_repository_dependency() function.
-        Validates that repo_name exists in the system.
+        Allows incremental storage of insights as you analyze the repository:
+        - Merges new insights with existing ones
+        - Can be called multiple times during analysis
+        - Preserves existing markdown report if present
         
         Parameters:
         - repo_name: Name of the repository (must exist)
-        - markdown_summary: Comprehensive markdown report
-        - deep_insights: Custom key-value pairs for additional insights
+        - deep_insights: Key-value pairs of insights to add/update
         
         Example:
-        store_repository_deep_analysis(
+        store_repository_deep_insights(
             repo_name="customer-api",
-            markdown_summary="# Customer API Analysis\\n## Overview\\n...",
             deep_insights={
-                "api_style": "RESTful with OpenAPI 3.0",
+                "architecture": "Microservice with REST API",
                 "database": "PostgreSQL with Prisma ORM",
-                "deployment": "Kubernetes with Helm charts",
-                "test_coverage": "85%",
-                "migration_effort_days": 15
+                "authentication": "JWT with refresh tokens",
+                "cloud_services": ["AWS S3", "AWS SQS", "ElastiCache"]
             }
         )""",
     )
-    async def store_repository_deep_analysis(
+    async def store_repository_deep_insights(
         self,
         repo_name: Annotated[str, "Repository name"],
-        markdown_summary: Annotated[str, "Comprehensive markdown analysis report"],
-        deep_insights: Annotated[Dict[str, Any], "Custom key-value insights"] = None
+        deep_insights: Annotated[Dict[str, Any], "Key-value insights to store/update"]
     ) -> Dict[str, Any]:
-        """Store comprehensive Phase 2 analysis with validation."""
+        """Store or update deep insights progressively during Phase 2 analysis."""
         
         try:
             # Validate repo exists
@@ -745,19 +739,22 @@ class DiscoveryMemoryPlugin:
                     ]
                 ).model_dump()
             
-            # Create deep analysis object
-            if deep_insights is None:
-                deep_insights = {}
-            
-            deep_analysis = DeepAnalysis(
-                markdown_summary=markdown_summary,
-                deep_insights=deep_insights,
-                analysis_timestamp=datetime.now()
-            )
-            
-            # Store in repository metadata
             repo = self.state.repositories[repo_name]
-            repo.deep_analysis = deep_analysis
+            
+            # Initialize or update deep analysis
+            if repo.deep_analysis is None:
+                # Create new deep analysis with empty markdown
+                repo.deep_analysis = DeepAnalysis(
+                    markdown_summary="",
+                    deep_insights=deep_insights,
+                    analysis_timestamp=datetime.now()
+                )
+                insights_action = "initialized"
+            else:
+                # Merge new insights with existing ones
+                repo.deep_analysis.deep_insights.update(deep_insights)
+                repo.deep_analysis.analysis_timestamp = datetime.now()
+                insights_action = "updated"
             
             # Save state
             self.storage.save_state(self.state)
@@ -766,30 +763,123 @@ class DiscoveryMemoryPlugin:
                 success=True,
                 data={
                     "repository": repo_name,
-                    "markdown_length": len(markdown_summary),
-                    "insights_count": len(deep_insights),
-                    "analysis_timestamp": deep_analysis.analysis_timestamp.isoformat()
+                    "insights_action": insights_action,
+                    "total_insights": len(repo.deep_analysis.deep_insights),
+                    "new_insights": len(deep_insights),
+                    "analysis_timestamp": repo.deep_analysis.analysis_timestamp.isoformat()
                 },
                 suggestions=[
-                    "Deep analysis stored successfully",
-                    "Use add_repository_dependency() to track dependencies to other repositories",
-                    "Use get_repository_details() to see complete repository information"
+                    f"Deep insights {insights_action} successfully",
+                    "Continue adding insights as you progress through analysis",
+                    "Use store_repository_markdown_report() to save final report when complete"
                 ],
                 metadata={
                     "phase": "2",
-                    "operation": "store_deep_analysis",
-                    "has_previous_analysis": repo.deep_analysis is not None
+                    "operation": "store_deep_insights",
+                    "has_markdown": bool(repo.deep_analysis.markdown_summary)
                 }
             ).model_dump()
             
         except Exception as e:
             return PluginResponse(
                 success=False,
-                error=f"Failed to store deep analysis: {str(e)}",
+                error=f"Failed to store deep insights: {str(e)}",
+                suggestions=[
+                    "Ensure deep_insights is a valid dictionary",
+                    "Verify repository name exists",
+                    "Check that values are JSON serializable"
+                ]
+            ).model_dump()
+
+    @kernel_function(
+        name="store_repository_markdown_report",
+        description="""Store the final comprehensive markdown report for Phase 2 analysis.
+        
+        Stores the complete markdown analysis report:
+        - Should be called at the end of analysis
+        - Preserves all existing deep insights
+        - Replaces any previous markdown report
+        
+        Parameters:
+        - repo_name: Name of the repository (must exist)
+        - markdown_summary: Complete markdown analysis report
+        
+        Example:
+        store_repository_markdown_report(
+            repo_name="customer-api",
+            markdown_summary="# Customer API Deep Analysis\\n\\n## Executive Summary\\n..."
+        )""",
+    )
+    async def store_repository_markdown_report(
+        self,
+        repo_name: Annotated[str, "Repository name"],
+        markdown_summary: Annotated[str, "Comprehensive markdown analysis report"]
+    ) -> Dict[str, Any]:
+        """Store the final markdown report for Phase 2 analysis."""
+        
+        try:
+            # Validate repo exists
+            if repo_name not in self.state.repositories:
+                return PluginResponse(
+                    success=False,
+                    error=f"Repository '{repo_name}' not found. Use get_all_repos() to see valid repositories.",
+                    suggestions=[
+                        "Check repository name spelling",
+                        "Run get_all_repos() to see available repositories",
+                        "Ensure repository has been discovered in Phase 1"
+                    ]
+                ).model_dump()
+            
+            repo = self.state.repositories[repo_name]
+            
+            # Initialize or update deep analysis
+            if repo.deep_analysis is None:
+                # Create new deep analysis with empty insights
+                repo.deep_analysis = DeepAnalysis(
+                    markdown_summary=markdown_summary,
+                    deep_insights={},
+                    analysis_timestamp=datetime.now()
+                )
+                report_action = "created"
+            else:
+                # Update markdown while preserving insights
+                repo.deep_analysis.markdown_summary = markdown_summary
+                repo.deep_analysis.analysis_timestamp = datetime.now()
+                report_action = "updated"
+            
+            # Save state
+            self.storage.save_state(self.state)
+            
+            return PluginResponse(
+                success=True,
+                data={
+                    "repository": repo_name,
+                    "report_action": report_action,
+                    "markdown_length": len(markdown_summary),
+                    "existing_insights": len(repo.deep_analysis.deep_insights),
+                    "analysis_timestamp": repo.deep_analysis.analysis_timestamp.isoformat()
+                },
+                suggestions=[
+                    f"Markdown report {report_action} successfully",
+                    "Phase 2 deep analysis complete for this repository",
+                    "Use get_repository_details() to see complete repository information",
+                    "Use generate_deep_analysis_report() to create comprehensive report"
+                ],
+                metadata={
+                    "phase": "2",
+                    "operation": "store_markdown_report",
+                    "has_insights": bool(repo.deep_analysis.deep_insights)
+                }
+            ).model_dump()
+            
+        except Exception as e:
+            return PluginResponse(
+                success=False,
+                error=f"Failed to store markdown report: {str(e)}",
                 suggestions=[
                     "Ensure markdown_summary is a valid string",
-                    "Check deep_insights is a valid dictionary",
-                    "Verify repository name exists"
+                    "Verify repository name exists",
+                    "Check markdown formatting is valid"
                 ]
             ).model_dump()
 
@@ -1016,7 +1106,7 @@ class DiscoveryMemoryPlugin:
                 data=details,
                 suggestions=[
                     "Repository details retrieved successfully",
-                    "Use store_repository_deep_analysis() to add Phase 2 analysis" if not repo.deep_analysis else "Deep analysis available",
+                    "Use store_repository_deep_insights() and store_repository_markdown_report() to add Phase 2 analysis" if not repo.deep_analysis else "Deep analysis available",
                     "Use add_repository_dependency() to add dependency relationships"
                 ],
                 metadata={

@@ -242,18 +242,23 @@ deep_analysis_agent:
        - Find API documentation and contracts
        [Note: Documentation search tools pending integration]
 
-    8. **Store Comprehensive Analysis**
-       - Create detailed markdown report with all findings
-       - Store using store_repository_deep_analysis() with:
-         - Comprehensive markdown summary
-         - Structured deep_insights dictionary with all technical details
-       - Ensure all dependencies are recorded with evidence
+    8. **Store Analysis Progressively and Generate Final Report**
+       - **During analysis (sections 1-7):** Use store_repository_deep_insights() to save findings progressively:
+         - After structure analysis: Store architecture insights
+         - After code analysis: Store technology and framework insights
+         - After dependency discovery: Store dependency summary
+         - After tech stack analysis: Store detailed stack information
+         - After complexity assessment: Store migration complexity insights
+         - After technical debt review: Store improvement opportunities
+       - **At the end:** Use store_repository_markdown_report() to save the comprehensive markdown report
+       - Ensure all dependencies are recorded with add_repository_dependency() as you find them
 
     ## TOOL USAGE GUIDELINES
 
     - **Memory tools (Phase 2 specific):**
       - get_repository_details("{repo_name}") - Get Phase 1 insights to build upon
-      - store_repository_deep_analysis(repo_name, markdown_summary, deep_insights) - Store your comprehensive analysis
+      - store_repository_deep_insights(repo_name, deep_insights) - Store insights progressively as you analyze
+      - store_repository_markdown_report(repo_name, markdown_summary) - Store final markdown report at the end
       - add_repository_dependency(source_repo, target_repo, dependency_type, description, evidence) - Record each dependency
       - get_dependency_graph() - Understand existing dependency relationships
 
@@ -327,10 +332,11 @@ deep_analysis_agent:
     ## SUCCESS CRITERIA
     You have successfully completed the deep analysis when:
     1. Complete repository structure and architecture is documented
-    2. All dependencies on other repositories are identified and recorded
+    2. All dependencies on other repositories are identified and recorded with add_repository_dependency()
     3. Technology stack is fully documented with versions
     4. Migration complexity is assessed with specific evidence
-    5. Comprehensive analysis is stored using store_repository_deep_analysis()
-    6. All findings are supported by specific code examples or configuration
+    5. All progressive insights are stored using store_repository_deep_insights()
+    6. Final markdown report is stored using store_repository_markdown_report()
+    7. All findings are supported by specific code examples or configuration
 
     Begin your analysis of {repo_name} now and work systematically through each section.

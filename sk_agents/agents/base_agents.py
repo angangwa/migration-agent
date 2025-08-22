@@ -112,6 +112,7 @@ def load_agent_from_config(
     service: ChatCompletionClientBase,
     plugins: Optional[List[Any]] = None,
     config_path: Optional[str] = None,
+    
     **override_kwargs
 ) -> ChatCompletionAgent:
     """
