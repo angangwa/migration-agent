@@ -9,6 +9,7 @@ memory storage to support efficient discovery of large enterprise codebases.
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Annotated
 from datetime import datetime
+import asyncio
 
 from semantic_kernel.functions import kernel_function
 
@@ -154,6 +155,8 @@ class DiscoveryMemoryPlugin:
         
         try:
             unanalyzed = {}
+            needs_insights_count = 0
+            needs_assignment_count = 0
             
             for repo_name, repo_metadata in self.state.repositories.items():
                 # Consider repos that need investigation or assignment
@@ -177,16 +180,18 @@ class DiscoveryMemoryPlugin:
                         'discovery_status': repo_metadata.discovery_phase_status,
                         'suggested_investigation': self._get_investigation_suggestions(repo_metadata)
                     }
+
+                    if not repo_metadata.insights:
+                        needs_insights_count += 1
+                    elif not repo_metadata.assigned_components:
+                        needs_assignment_count += 1
             
             suggestions = []
             if unanalyzed:
-                needs_insights = [repo for repo in unanalyzed.values() if "No insights" in repo['discovery_status']]
-                needs_assignment = [repo for repo in unanalyzed.values() if "Insights added. Assigned to no components" in repo['discovery_status']]
-                
                 suggestions.extend([
                     f"{len(unanalyzed)} repositories need attention",
-                    f"{len(needs_insights)} repositories need investigation (use filesystem tools)",
-                    f"{len(needs_assignment)} repositories need component assignment",
+                    f"{needs_insights_count} repositories need investigation (use filesystem tools)",
+                    f"{needs_assignment_count} repositories need component assignment",
                     "Store findings with store_repo_insights() after investigating each repository",
                     "Assign repositories to components with assign_repo_to_component()"
                 ])
@@ -267,20 +272,22 @@ class DiscoveryMemoryPlugin:
                     ]
                 ).model_dump()
             
-            # Update repository with insights
-            repo_metadata = self.state.repositories[repo_name]
-            repo_metadata.insights.update(insights)
-            repo_metadata.update_discovery_status()
-            
-            # Update progress counters
-            self.state.repositories_with_insights = len([
-                repo for repo in self.state.repositories.values() 
-                if repo.insights
-            ])
-            
-            # Store updated metadata
-            self.storage.update_repository(repo_name, repo_metadata)
-            self.storage.save_state(self.state)
+            # Update repository with insights under storage lock
+            with self.storage.batch_update():
+                repo_metadata = self.state.repositories[repo_name]
+                repo_metadata.insights.update(insights)
+                repo_metadata.update_discovery_status()
+
+                # Update progress counters
+                self.state.repositories_with_insights = len([
+                    repo for repo in self.state.repositories.values() 
+                    if repo.insights
+                ])
+
+                # Store updated metadata
+                self.storage.update_repository(repo_name, repo_metadata)
+            # Persist without blocking event loop
+            await asyncio.to_thread(self.storage.save_state, self.state)
             
             return PluginResponse(
                 success=True,
@@ -382,7 +389,8 @@ class DiscoveryMemoryPlugin:
             
             # Store component
             self.storage.add_component(name, component_data)
-            self.storage.save_state(self.state)
+            # Persist without blocking event loop
+            await asyncio.to_thread(self.storage.save_state, self.state)
             
             return PluginResponse(
                 success=True,
@@ -400,7 +408,7 @@ class DiscoveryMemoryPlugin:
                     "Aim for 3-15 repositories per component for optimal migration planning"
                 ],
                 metadata={
-                    'total_components': len(self.state.components) + 1
+                    'total_components': len(self.state.components)
                 }
             ).model_dump()
             
@@ -480,9 +488,10 @@ class DiscoveryMemoryPlugin:
                     ]
                 ).model_dump()
             
-            # Perform assignment
-            self.storage.assign_repo_to_component(repo_name, component_name)
-            self.storage.save_state(self.state)
+            # Perform assignment under lock and persist
+            with self.storage.batch_update():
+                self.storage.assign_repo_to_component(repo_name, component_name)
+            await asyncio.to_thread(self.storage.save_state, self.state)
             
             # Get updated data
             component_data = self.state.components[component_name]
@@ -740,24 +749,26 @@ class DiscoveryMemoryPlugin:
                 ).model_dump()
             
             repo = self.state.repositories[repo_name]
-            
-            # Initialize or update deep analysis
-            if repo.deep_analysis is None:
-                # Create new deep analysis with empty markdown
-                repo.deep_analysis = DeepAnalysis(
-                    markdown_summary="",
-                    deep_insights=deep_insights,
-                    analysis_timestamp=datetime.now()
-                )
-                insights_action = "initialized"
-            else:
-                # Merge new insights with existing ones
-                repo.deep_analysis.deep_insights.update(deep_insights)
-                repo.deep_analysis.analysis_timestamp = datetime.now()
-                insights_action = "updated"
-            
-            # Save state
-            self.storage.save_state(self.state)
+
+            # Guard mutation with storage lock and force persistence
+            with self.storage.batch_update():
+                # Initialize or update deep analysis
+                if repo.deep_analysis is None:
+                    # Create new deep analysis with empty markdown
+                    repo.deep_analysis = DeepAnalysis(
+                        markdown_summary="",
+                        deep_insights=deep_insights,
+                        analysis_timestamp=datetime.now()
+                    )
+                    insights_action = "initialized"
+                else:
+                    # Merge new insights with existing ones
+                    repo.deep_analysis.deep_insights.update(deep_insights)
+                    repo.deep_analysis.analysis_timestamp = datetime.now()
+                    insights_action = "updated"
+
+            # Save state (force) without blocking event loop
+            await asyncio.to_thread(self.storage.save_state, self.state, True)
             
             return PluginResponse(
                 success=True,
@@ -831,24 +842,26 @@ class DiscoveryMemoryPlugin:
                 ).model_dump()
             
             repo = self.state.repositories[repo_name]
-            
-            # Initialize or update deep analysis
-            if repo.deep_analysis is None:
-                # Create new deep analysis with empty insights
-                repo.deep_analysis = DeepAnalysis(
-                    markdown_summary=markdown_summary,
-                    deep_insights={},
-                    analysis_timestamp=datetime.now()
-                )
-                report_action = "created"
-            else:
-                # Update markdown while preserving insights
-                repo.deep_analysis.markdown_summary = markdown_summary
-                repo.deep_analysis.analysis_timestamp = datetime.now()
-                report_action = "updated"
-            
-            # Save state
-            self.storage.save_state(self.state)
+
+            # Guard mutation with storage lock and force persistence
+            with self.storage.batch_update():
+                # Initialize or update deep analysis
+                if repo.deep_analysis is None:
+                    # Create new deep analysis with empty insights
+                    repo.deep_analysis = DeepAnalysis(
+                        markdown_summary=markdown_summary,
+                        deep_insights={},
+                        analysis_timestamp=datetime.now()
+                    )
+                    report_action = "created"
+                else:
+                    # Update markdown while preserving insights
+                    repo.deep_analysis.markdown_summary = markdown_summary
+                    repo.deep_analysis.analysis_timestamp = datetime.now()
+                    report_action = "updated"
+
+            # Save state (force) without blocking event loop
+            await asyncio.to_thread(self.storage.save_state, self.state, True)
             
             return PluginResponse(
                 success=True,
@@ -971,24 +984,25 @@ class DiscoveryMemoryPlugin:
                         ]
                     ).model_dump()
             
-            # Create dependency record
-            dependency = DependencyRecord(
-                source_repo=source_repo,
-                target_repo=target_repo,
-                dependency_type=dependency_type,
-                description=description,
-                evidence=evidence,
-                created_at=datetime.now()
-            )
-            
-            # Add to dependency records
-            self.state.dependency_records.append(dependency)
-            
-            # Clear cache to force rebuild
-            self._clear_dependency_cache()
-            
-            # Save state
-            self.storage.save_state(self.state)
+            # Create dependency record and mutate state under lock
+            with self.storage.batch_update():
+                dependency = DependencyRecord(
+                    source_repo=source_repo,
+                    target_repo=target_repo,
+                    dependency_type=dependency_type,
+                    description=description,
+                    evidence=evidence,
+                    created_at=datetime.now()
+                )
+
+                # Add to dependency records
+                self.state.dependency_records.append(dependency)
+
+                # Clear cache to force rebuild
+                self._clear_dependency_cache()
+
+            # Save state (force) without blocking event loop
+            await asyncio.to_thread(self.storage.save_state, self.state, True)
             
             return PluginResponse(
                 success=True,
@@ -1479,18 +1493,18 @@ class DiscoveryMemoryPlugin:
             print(f"[{current}/{total}] ({current/total*100:.1f}%) Analyzing: {repo_name}")
         
         try:
-            # Perform parallel analysis
-            analysis_results = self.parallel_processor.process_repositories(
+            # Perform parallel analysis without blocking event loop
+            analysis_results = await asyncio.to_thread(
+                self.parallel_processor.process_repositories,
                 repo_paths,
                 self.analyzer.analyze_repository,
-                progress_callback
+                progress_callback,
             )
             
-            # Store results in state
+            # Store results in state (single batch, avoid redundant per-repo updates)
             with self.storage.batch_update():
                 for repo_name, metadata in analysis_results.items():
                     self.state.repositories[repo_name] = metadata
-                    self.storage.update_repository(repo_name, metadata)
             
             # Update progress counters
             self.state.repositories_with_insights = len([
@@ -1502,8 +1516,8 @@ class DiscoveryMemoryPlugin:
             self.state.analysis_completed = datetime.now()
             self._initial_analysis_done = True
             
-            # Save state
-            self.storage.save_state(self.state)
+            # Save state (force to ensure persistence when mutating state directly)
+            await asyncio.to_thread(self.storage.save_state, self.state, True)
             
             # Return results
             repos_data = {}
