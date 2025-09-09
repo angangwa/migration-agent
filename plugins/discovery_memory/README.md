@@ -90,7 +90,6 @@ All functions return standardized `PluginResponse` objects with success status, 
       "frameworks": ["Django", "React"],
       "total_files": 156,
       "estimated_loc": 12500,
-      "repository_type": "microservice",
       "has_readme": true,
       "assigned_components": ["backend-services"],
       "analysis_confidence": 0.85

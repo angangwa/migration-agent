@@ -1582,7 +1582,8 @@ class DiscoveryMemoryPlugin:
         elif '.java' in repo_metadata.file_counts:
             suggestions.append("Find Main.java or Application.java entry points")
         
-        if repo_metadata.repository_type.value == "unknown":
+        # Always suggest exploring structure for repositories without insights
+        if not repo_metadata.insights:
             suggestions.append("Explore directory structure to understand architecture")
         
         return suggestions
